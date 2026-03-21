@@ -10,18 +10,32 @@ import { Leaf, Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
+async function claimGroupMemberships(userId: string, email: string) {
+  await supabase
+    .from('group_members')
+    .update({ user_id: userId })
+    .eq('email', email)
+    .is('user_id', null);
+}
+
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
+      if (session?.user?.email) {
+        claimGroupMemberships(session.user.id, session.user.email);
+      }
       setSession(session);
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event: string, session: Session | null) => {
+      (event: string, session: Session | null) => {
+        if (event === 'SIGNED_IN' && session?.user?.email) {
+          claimGroupMemberships(session.user.id, session.user.email);
+        }
         setSession(session);
         setLoading(false);
       },
@@ -33,9 +47,7 @@ function App() {
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
     if (error) alert(error.message);
   };

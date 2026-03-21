@@ -80,7 +80,6 @@ export default function Home({ userId, userEmail, onSignOut }: HomeProps) {
             storeName={store.storeName}
             setStoreName={store.setStoreName}
             participants={store.participants}
-            updateParticipant={store.updateParticipant}
             addParticipant={store.addParticipant}
             removeParticipant={store.removeParticipant}
           />

@@ -35,13 +35,7 @@ export interface PersonSummary {
   finalPayable: number;
 }
 
-export const DEFAULT_PARTICIPANTS: Participant[] = [
-  { name: 'Alice', email: '' },
-  { name: 'Bob', email: '' },
-  { name: 'Carol', email: '' },
-  { name: 'Dave', email: '' },
-  { name: 'Eve', email: '' },
-];
+export const DEFAULT_PARTICIPANTS: Participant[] = [];
 
 export function computePersonSummaries(
   participants: { name: string }[],
@@ -140,16 +134,13 @@ export function useGroceryStore(userId?: string) {
     [],
   );
 
-  const addParticipant = useCallback(() => {
-    setParticipants((prev) => [
-      ...prev,
-      { name: `Roommate ${prev.length + 1}`, email: '' },
-    ]);
+  const addParticipant = useCallback((participant: Participant) => {
+    setParticipants((prev) => [...prev, participant]);
   }, []);
 
   const removeParticipant = useCallback((index: number) => {
     setParticipants((prev) => {
-      if (prev.length <= 1) return prev;
+      if (prev.length === 0) return prev;
       return prev.filter((_, i) => i !== index);
     });
     setItems((prev) =>
