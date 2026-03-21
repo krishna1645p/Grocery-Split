@@ -1,0 +1,12 @@
+packages:
+  "framer-motion": "For smooth additions, deletions, and entry animations in the UI"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility function to efficiently merge Tailwind CSS classes in JS without style conflicts"
+  "@hookform/resolvers": "Zod validation for react-hook-form"
+  "zod": "Schema validation for forms"
+  "react-hook-form": "Form state management"
+
+images: []
+
+notes:
+  - No backend required for v1. All state is maintained locally in React.
