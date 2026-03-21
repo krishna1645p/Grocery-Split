@@ -47,7 +47,7 @@ function App() {
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: "https://shared-order-tracker--kp161145.replit.app" },
     });
     if (error) alert(error.message);
   };
