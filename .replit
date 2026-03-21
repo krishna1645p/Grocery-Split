@@ -8,8 +8,7 @@ id = "artifacts/mockup-sandbox"
 
 [deployment]
 router = "application"
-deploymentTarget = "static"
-publicDir = "artifacts/grocery-split/dist/public"
+deploymentTarget = "cloudrun"
 build = ["sh", "-c", "cd artifacts/grocery-split && BASE_PATH=/ PORT=3000 npm run build"]
 
 [deployment.postBuild]
