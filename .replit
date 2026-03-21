@@ -10,6 +10,7 @@ id = "artifacts/mockup-sandbox"
 router = "application"
 deploymentTarget = "cloudrun"
 build = ["sh", "-c", "cd artifacts/grocery-split && BASE_PATH=/ PORT=3000 npm run build"]
+run = ["sh", "-c", "npx serve artifacts/grocery-split/dist/public -s -l 3000"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
