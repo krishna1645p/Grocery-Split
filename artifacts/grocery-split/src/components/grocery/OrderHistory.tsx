@@ -30,7 +30,7 @@ interface RawItem {
   link: string | null;
   base_price: number;
   quantity: number;
-  requested_by_index: number;
+  requested_by: string;
   split_type: string;
   split_with_indices: number[];
 }
@@ -39,7 +39,7 @@ interface RawAdjustment {
   tax: number;
   delivery: number;
   tip: number;
-  promo: number;
+  promo_savings: number;
 }
 
 interface RawMember {
@@ -92,20 +92,27 @@ function OrderCard({ order }: { order: RawOrder }) {
   const [expanded, setExpanded] = useState(false);
 
   const members = order.groups?.group_members ?? [];
-  const adj = order.adjustments[0] ?? { tax: 0, delivery: 0, tip: 0, promo: 0 };
+  const adj = order.adjustments[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 };
 
-  const itemsForCalc = order.items.map((i) => ({
-    basePrice: i.base_price,
-    quantity: i.quantity,
-    requestedByIndex: i.requested_by_index,
-    splitType: i.split_type as 'self' | 'all' | 'selected',
-    splitWithIndices: i.split_with_indices ?? [],
-  }));
+  const getMemberName = (idx: number) => members[idx]?.name ?? '—';
+
+  const itemsForCalc = order.items.map((i) => {
+    const requestedByIndex = members.findIndex((m) => m.name === i.requested_by);
+    return {
+      basePrice: i.base_price,
+      quantity: i.quantity,
+      requestedByIndex: requestedByIndex >= 0 ? requestedByIndex : 0,
+      splitType: i.split_type as 'self' | 'all' | 'selected',
+      splitWithIndices: i.split_with_indices ?? [],
+    };
+  });
+
+  const adjForCalc = { tax: adj.tax, delivery: adj.delivery, tip: adj.tip, promo: adj.promo_savings };
 
   const { personSummaries, totalItemsSubtotal, totalAdjustments, grandTotal } =
-    computePersonSummaries(members, itemsForCalc, adj);
+    computePersonSummaries(members, itemsForCalc, adjForCalc);
 
-  const hasAdjustments = adj.tax > 0 || adj.delivery > 0 || adj.tip > 0 || adj.promo > 0;
+  const hasAdjustments = adj.tax > 0 || adj.delivery > 0 || adj.tip > 0 || adj.promo_savings > 0;
 
   const createdAt = new Date(order.created_at).toLocaleDateString("en-US", {
     year: "numeric",
@@ -113,10 +120,8 @@ function OrderCard({ order }: { order: RawOrder }) {
     day: "numeric",
   });
 
-  const getMemberName = (idx: number) => members[idx]?.name ?? '—';
-
   const getSplitDescription = (item: RawItem) => {
-    if (item.split_type === 'self') return getMemberName(item.requested_by_index);
+    if (item.split_type === 'self') return item.requested_by || '—';
     if (item.split_type === 'all') return `All ${members.length}`;
     return (item.split_with_indices ?? []).map((i) => getMemberName(i)).join(', ');
   };
@@ -213,9 +218,9 @@ function OrderCard({ order }: { order: RawOrder }) {
                                 <td className="px-4 py-3 hidden md:table-cell">
                                   <div className="flex items-center gap-2">
                                     <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold uppercase shrink-0">
-                                      {getMemberName(item.requested_by_index).charAt(0)}
+                                      {(item.requested_by || '?').charAt(0)}
                                     </div>
-                                    <span className="text-muted-foreground">{getMemberName(item.requested_by_index)}</span>
+                                    <span className="text-muted-foreground">{item.requested_by || '—'}</span>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 hidden sm:table-cell">
@@ -270,7 +275,7 @@ function OrderCard({ order }: { order: RawOrder }) {
                       <AdjustmentPill icon={<Receipt className="w-4 h-4 text-red-400" />} label="Tax" value={adj.tax} positive={true} />
                       <AdjustmentPill icon={<Truck className="w-4 h-4 text-orange-400" />} label="Delivery" value={adj.delivery} positive={true} />
                       <AdjustmentPill icon={<HeartHandshake className="w-4 h-4 text-amber-400" />} label="Tip" value={adj.tip} positive={true} />
-                      <AdjustmentPill icon={<Tags className="w-4 h-4 text-primary" />} label="Promo" value={adj.promo} positive={false} />
+                      <AdjustmentPill icon={<Tags className="w-4 h-4 text-primary" />} label="Promo" value={adj.promo_savings} positive={false} />
                     </div>
                     {totalAdjustments !== 0 && (
                       <p className="text-xs text-muted-foreground mt-2 px-1">
@@ -395,8 +400,8 @@ export function OrderHistory({ userId, refreshTrigger }: OrderHistoryProps) {
               name,
               group_members ( id, name, email )
             ),
-            items ( id, name, link, base_price, quantity, requested_by_index, split_type, split_with_indices ),
-            adjustments ( tax, delivery, tip, promo )
+            items ( id, name, link, base_price, quantity, requested_by, split_type, split_with_indices ),
+            adjustments ( tax, delivery, tip, promo_savings )
           `)
           .in('group_id', groupIds)
           .order('created_at', { ascending: false });

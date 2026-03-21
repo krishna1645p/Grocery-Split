@@ -204,7 +204,8 @@ export function useGroceryStore(userId?: string) {
           link: item.link || null,
           base_price: item.basePrice,
           quantity: item.quantity,
-          requested_by_index: item.requestedByIndex,
+          total_price: item.basePrice * item.quantity,
+          requested_by: participants[item.requestedByIndex]?.name ?? '',
           split_type: item.splitType,
           split_with_indices: item.splitWithIndices,
         }));
@@ -219,7 +220,7 @@ export function useGroceryStore(userId?: string) {
         tax: adjustments.tax,
         delivery: adjustments.delivery,
         tip: adjustments.tip,
-        promo: adjustments.promo,
+        promo_savings: adjustments.promo,
       });
       if (adjError) throw adjError;
 
