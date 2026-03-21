@@ -187,6 +187,7 @@ export function useGroceryStore(userId?: string) {
         group_id: group.id,
         name: p.name,
         email: p.email || null,
+        user_id: userId,
       }));
       const { error: membersError } = await supabase
         .from('group_members')
