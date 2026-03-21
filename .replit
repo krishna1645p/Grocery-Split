@@ -8,7 +8,9 @@ id = "artifacts/mockup-sandbox"
 
 [deployment]
 router = "application"
-deploymentTarget = "autoscale"
+deploymentTarget = "static"
+publicDir = "artifacts/grocery-split/dist/public"
+build = ["sh", "-c", "cd artifacts/grocery-split && BASE_PATH=/ PORT=3000 npm run build"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]

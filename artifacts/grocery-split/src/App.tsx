@@ -1,5 +1,7 @@
+// @ts-ignore
 import { supabase } from "../../../lib/supabase";
 import { useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -19,7 +21,7 @@ function Router() {
 }
 
 function App() {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,10 +38,12 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
+    } = supabase.auth.onAuthStateChange(
+      (_event: string, session: Session | null) => {
+        setSession(session);
+        setLoading(false);
+      },
+    );
 
     return () => subscription.unsubscribe();
   }, []);
@@ -48,7 +52,7 @@ function App() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: "https://shared-order-tracker-kp161145.replit.app",
       },
     });
 
