@@ -1,7 +1,8 @@
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { type PersonSummary } from "@/hooks/use-grocery-store";
-import { Calculator, ArrowRight } from "lucide-react";
+import { Calculator, CheckCircle2, Loader2, Send } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface SettlementSummaryProps {
@@ -11,16 +12,23 @@ interface SettlementSummaryProps {
     totalAdjustments: number;
     grandTotal: number;
   };
+  onSubmit?: () => Promise<void>;
+  isSubmitting?: boolean;
+  lastSubmittedOrderId?: string | null;
 }
 
-export function SettlementSummary({ summary }: SettlementSummaryProps) {
+export function SettlementSummary({
+  summary,
+  onSubmit,
+  isSubmitting = false,
+  lastSubmittedOrderId = null,
+}: SettlementSummaryProps) {
   const { personSummaries, totalItemsSubtotal, totalAdjustments, grandTotal } = summary;
 
   return (
     <Card className="p-6 md:p-8 bg-gradient-to-br from-primary/10 via-background to-background border-primary/20 shadow-lg relative overflow-hidden">
-      {/* Decorative background element */}
       <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-      
+
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -32,7 +40,7 @@ export function SettlementSummary({ summary }: SettlementSummaryProps) {
             </h3>
             <p className="text-muted-foreground mt-1 text-sm">Who owes what based on the split rules</p>
           </div>
-          
+
           <div className="text-right hidden sm:block">
             <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Grand Total</p>
             <p className="text-3xl font-display font-bold text-primary">{formatCurrency(grandTotal)}</p>
@@ -67,7 +75,7 @@ export function SettlementSummary({ summary }: SettlementSummaryProps) {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <motion.div 
+                    <motion.div
                       key={person.finalPayable}
                       initial={{ scale: 0.95, color: "hsl(var(--primary))" }}
                       animate={{ scale: 1, color: "inherit" }}
@@ -90,10 +98,45 @@ export function SettlementSummary({ summary }: SettlementSummaryProps) {
           </table>
         </div>
 
-        <div className="sm:hidden text-center p-4 bg-primary/5 rounded-xl border border-primary/20">
+        <div className="sm:hidden text-center p-4 bg-primary/5 rounded-xl border border-primary/20 mb-6">
           <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Grand Total</p>
           <p className="text-4xl font-display font-bold text-primary">{formatCurrency(grandTotal)}</p>
         </div>
+
+        {onSubmit && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-primary/10">
+            {lastSubmittedOrderId ? (
+              <div className="flex items-center gap-2 text-primary font-medium">
+                <CheckCircle2 className="w-5 h-5" />
+                Order saved successfully!
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Save this order to your history so you can reference it later.
+              </p>
+            )}
+            <Button
+              size="lg"
+              onClick={onSubmit}
+              disabled={isSubmitting || personSummaries.length === 0}
+              className="font-semibold px-8 gap-2 shadow-md"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+                </>
+              ) : lastSubmittedOrderId ? (
+                <>
+                  <Send className="w-4 h-4" /> Save Again
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" /> Submit Order
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );

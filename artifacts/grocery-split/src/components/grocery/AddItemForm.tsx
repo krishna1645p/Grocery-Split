@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,20 +11,27 @@ import { type GroceryItem, type SplitType } from "@/hooks/use-grocery-store";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AddItemFormProps {
-  participants: string[];
+  participantNames: string[];
   onAdd: (item: Omit<GroceryItem, 'id'>) => void;
 }
 
-export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
+export function AddItemForm({ participantNames, onAdd }: AddItemFormProps) {
   const [name, setName] = useState("");
   const [link, setLink] = useState("");
   const [basePrice, setBasePrice] = useState("");
   const [quantity, setQuantity] = useState("1");
-  const [requestedBy, setRequestedBy] = useState("0"); // index string
+  const [requestedBy, setRequestedBy] = useState("0");
   const [splitType, setSplitType] = useState<SplitType>("self");
-  const [splitWith, setSplitWith] = useState<Record<number, boolean>>({
-    0: true, 1: true, 2: true, 3: true, 4: true
-  });
+  const [splitWith, setSplitWith] = useState<Record<number, boolean>>(() =>
+    Object.fromEntries(participantNames.map((_, i) => [i, true]))
+  );
+
+  useEffect(() => {
+    setSplitWith(Object.fromEntries(participantNames.map((_, i) => [i, true])));
+    if (parseInt(requestedBy) >= participantNames.length) {
+      setRequestedBy("0");
+    }
+  }, [participantNames.length]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,12 +51,10 @@ export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
       splitWithIndices: splitType === 'selected' ? selectedIndices : [],
     });
 
-    // Reset some fields for quick consecutive additions
     setName("");
     setLink("");
     setBasePrice("");
     setQuantity("1");
-    // keep requestedBy and split rules same as it's often consecutive for same person
   };
 
   const handleSplitWithChange = (idx: number, checked: boolean) => {
@@ -69,7 +74,6 @@ export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-          {/* Main Item Details */}
           <div className="md:col-span-6 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Item Name *</Label>
@@ -95,7 +99,7 @@ export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
                 className="bg-white"
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="price" className="flex items-center gap-1.5">
@@ -132,7 +136,6 @@ export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
             </div>
           </div>
 
-          {/* Split Logic Rules */}
           <div className="md:col-span-6 space-y-5 bg-secondary/30 p-5 rounded-xl border border-border/50">
             <div className="space-y-2">
               <Label>Requested By</Label>
@@ -141,7 +144,7 @@ export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
                   <SelectValue placeholder="Select person" />
                 </SelectTrigger>
                 <SelectContent>
-                  {participants.map((p, idx) => (
+                  {participantNames.map((p, idx) => (
                     <SelectItem key={idx} value={idx.toString()}>{p}</SelectItem>
                   ))}
                 </SelectContent>
@@ -150,38 +153,44 @@ export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
 
             <div className="space-y-3 pt-2">
               <Label>How should this be split?</Label>
-              <RadioGroup 
-                value={splitType} 
+              <RadioGroup
+                value={splitType}
                 onValueChange={(val) => setSplitType(val as SplitType)}
                 className="flex flex-col gap-3"
               >
                 <div className="flex items-center space-x-3 bg-white p-3 rounded-lg border border-border shadow-sm">
                   <RadioGroupItem value="self" id="self" />
-                  <Label htmlFor="self" className="font-medium cursor-pointer flex-1">Only me ({participants[parseInt(requestedBy)]})</Label>
+                  <Label htmlFor="self" className="font-medium cursor-pointer flex-1">
+                    Only me ({participantNames[parseInt(requestedBy)] ?? '—'})
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-3 bg-white p-3 rounded-lg border border-border shadow-sm">
                   <RadioGroupItem value="all" id="all" />
-                  <Label htmlFor="all" className="font-medium cursor-pointer flex-1">Split equally among everyone (5 ways)</Label>
+                  <Label htmlFor="all" className="font-medium cursor-pointer flex-1">
+                    Split equally among everyone ({participantNames.length} ways)
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-3 bg-white p-3 rounded-lg border border-border shadow-sm">
                   <RadioGroupItem value="selected" id="selected" />
-                  <Label htmlFor="selected" className="font-medium cursor-pointer flex-1">Split equally among selected...</Label>
+                  <Label htmlFor="selected" className="font-medium cursor-pointer flex-1">
+                    Split equally among selected...
+                  </Label>
                 </div>
               </RadioGroup>
             </div>
 
             <AnimatePresence>
               {splitType === 'selected' && (
-                <motion.div 
+                <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   className="overflow-hidden"
                 >
                   <div className="bg-white p-4 rounded-lg border border-border shadow-sm grid grid-cols-2 gap-3">
-                    {participants.map((p, idx) => (
+                    {participantNames.map((p, idx) => (
                       <div key={idx} className="flex items-center space-x-2">
-                        <Checkbox 
+                        <Checkbox
                           id={`split-${idx}`}
                           checked={splitWith[idx] || false}
                           onCheckedChange={(checked) => handleSplitWithChange(idx, checked === true)}
@@ -197,7 +206,7 @@ export function AddItemForm({ participants, onAdd }: AddItemFormProps) {
         </div>
 
         <div className="pt-4 border-t border-border flex justify-end">
-          <Button type="submit" size="lg" className="w-full md:w-auto font-semibold px-8 hover-elevate active-elevate-2 shadow-sm">
+          <Button type="submit" size="lg" className="w-full md:w-auto font-semibold px-8 shadow-sm">
             <PlusCircle className="w-4 h-4 mr-2" /> Add Item
           </Button>
         </div>

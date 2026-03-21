@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/Home";
+import { Leaf, Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
@@ -14,20 +15,12 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       setSession(session);
       setLoading(false);
-    };
+    });
 
-    loadSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event: string, session: Session | null) => {
         setSession(session);
         setLoading(false);
@@ -41,79 +34,41 @@ function App() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "https://shared-order-tracker-kp161145.replit.app",
+        redirectTo: window.location.origin,
       },
     });
-
-    if (error) {
-      alert(error.message);
-    }
+    if (error) alert(error.message);
   };
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
-    if (error) {
-      alert(error.message);
-    }
+    if (error) alert(error.message);
   };
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#f6f8f6",
-          fontFamily: "sans-serif",
-        }}
-      >
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
     );
   }
 
   if (!session) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#f6f8f6",
-          fontFamily: "sans-serif",
-          padding: "1rem",
-        }}
-      >
-        <div
-          style={{
-            background: "white",
-            padding: "2rem",
-            borderRadius: "16px",
-            width: "100%",
-            maxWidth: "420px",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-            textAlign: "center",
-          }}
-        >
-          <h1 style={{ marginBottom: "0.5rem" }}>GrocerySplit</h1>
-          <p style={{ color: "#666", marginBottom: "1.5rem" }}>
-            Sign in to create and manage shared grocery orders.
-          </p>
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="bg-card border rounded-2xl p-8 w-full max-w-sm shadow-lg text-center space-y-6">
+          <div className="flex flex-col items-center gap-3">
+            <div className="bg-primary text-primary-foreground p-3 rounded-2xl shadow-md">
+              <Leaf className="w-7 h-7" />
+            </div>
+            <h1 className="text-2xl font-bold">GrocerySplit</h1>
+            <p className="text-muted-foreground text-sm">
+              Sign in to create and manage shared grocery orders with your roommates.
+            </p>
+          </div>
           <button
             onClick={signInWithGoogle}
-            style={{
-              padding: "0.9rem 1.2rem",
-              borderRadius: "10px",
-              border: "none",
-              cursor: "pointer",
-              width: "100%",
-              fontSize: "1rem",
-              background: "#111",
-              color: "white",
-            }}
+            className="w-full py-3 px-4 rounded-xl bg-foreground text-background font-semibold text-sm hover:opacity-90 transition-opacity"
           >
             Continue with Google
           </button>
@@ -125,57 +80,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <div
-          style={{
-            minHeight: "100vh",
-            background: "#f6f8f6",
-          }}
-        >
-          <div
-            style={{
-              maxWidth: "1200px",
-              margin: "0 auto",
-              padding: "1rem",
-            }}
-          >
-            <div
-              style={{
-                background: "white",
-                borderRadius: "16px",
-                padding: "1rem 1.25rem",
-                marginBottom: "1rem",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
-                gap: "1rem",
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <h1 style={{ margin: 0, fontSize: "1.5rem" }}>GrocerySplit</h1>
-                <p style={{ margin: "0.35rem 0 0", color: "#666" }}>
-                  Signed in as {session.user.email}
-                </p>
-              </div>
-
-              <button
-                onClick={signOut}
-                style={{
-                  padding: "0.7rem 1rem",
-                  borderRadius: "10px",
-                  border: "1px solid #ddd",
-                  background: "white",
-                  cursor: "pointer",
-                }}
-              >
-                Logout
-              </button>
-            </div>
-
-            <Home />
-          </div>
-        </div>
+        <Home
+          userId={session.user.id}
+          userEmail={session.user.email}
+          onSignOut={signOut}
+        />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

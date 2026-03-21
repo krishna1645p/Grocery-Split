@@ -8,13 +8,13 @@ import { motion, AnimatePresence } from "framer-motion";
 
 interface ItemListProps {
   items: GroceryItem[];
-  participants: string[];
+  participantNames: string[];
   onDelete: (id: string) => void;
   onClearAll: () => void;
 }
 
-export function ItemList({ items, participants, onDelete, onClearAll }: ItemListProps) {
-  
+export function ItemList({ items, participantNames, onDelete, onClearAll }: ItemListProps) {
+
   const getSplitBadge = (item: GroceryItem) => {
     switch (item.splitType) {
       case 'self':
@@ -27,9 +27,9 @@ export function ItemList({ items, participants, onDelete, onClearAll }: ItemList
   };
 
   const getSplitText = (item: GroceryItem) => {
-    if (item.splitType === 'self') return participants[item.requestedByIndex];
-    if (item.splitType === 'all') return "All 5";
-    return item.splitWithIndices.map(idx => participants[idx]).join(", ");
+    if (item.splitType === 'self') return participantNames[item.requestedByIndex] ?? '—';
+    if (item.splitType === 'all') return `All ${participantNames.length}`;
+    return item.splitWithIndices.map(idx => participantNames[idx] ?? '?').join(", ");
   };
 
   if (items.length === 0) {
@@ -75,7 +75,7 @@ export function ItemList({ items, participants, onDelete, onClearAll }: ItemList
             <tbody className="divide-y divide-border bg-card">
               <AnimatePresence>
                 {items.map((item) => (
-                  <motion.tr 
+                  <motion.tr
                     key={item.id}
                     initial={{ opacity: 0, backgroundColor: 'hsl(var(--primary) / 0.1)' }}
                     animate={{ opacity: 1, backgroundColor: 'transparent' }}
@@ -98,9 +98,9 @@ export function ItemList({ items, participants, onDelete, onClearAll }: ItemList
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold uppercase">
-                          {participants[item.requestedByIndex]?.charAt(0)}
+                          {participantNames[item.requestedByIndex]?.charAt(0) ?? '?'}
                         </div>
-                        {participants[item.requestedByIndex]}
+                        {participantNames[item.requestedByIndex] ?? '—'}
                       </div>
                     </td>
                     <td className="px-4 py-4">
@@ -113,9 +113,9 @@ export function ItemList({ items, participants, onDelete, onClearAll }: ItemList
                     </td>
                     <td className="px-4 py-4 text-center">
                       {item.link ? (
-                        <a 
-                          href={item.link} 
-                          target="_blank" 
+                        <a
+                          href={item.link}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-secondary text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
                           title="Open Link"
@@ -127,9 +127,9 @@ export function ItemList({ items, participants, onDelete, onClearAll }: ItemList
                       )}
                     </td>
                     <td className="px-4 py-4 text-right">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => onDelete(item.id)}
                         className="opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 transition-all focus:opacity-100"
                         title="Delete Item"
