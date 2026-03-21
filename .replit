@@ -26,3 +26,6 @@ runButton = "Project"
 [userenv.shared]
 VITE_SUPABASE_URL = "https://fviajyyfehltjjfaykva.supabase.co"
 VITE_SUPABASE_ANON_KEY = "sb_publishable_VbeQvVQ62kvQHMokrkgHOA_t6Cb6r7_"
+
+[agent]
+expertMode = true
