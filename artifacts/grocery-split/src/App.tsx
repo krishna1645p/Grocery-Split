@@ -34,6 +34,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>({ type: 'groups' });
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  const [membersTrigger, setMembersTrigger] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
@@ -129,7 +130,9 @@ function App() {
               })
             }
             refreshTrigger={lastOrderId}
+            membersTrigger={membersTrigger}
             onMembersChanged={async () => {
+              setMembersTrigger(Date.now().toString());
               const { data } = await supabase
                 .from('groups')
                 .select('id, name, created_by, group_members ( id, name, email, user_id )')

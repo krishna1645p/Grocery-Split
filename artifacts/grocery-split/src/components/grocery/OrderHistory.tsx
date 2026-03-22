@@ -78,6 +78,7 @@ interface OrderHistoryProps {
   refreshTrigger?: string | null;
   filterGroupId?: string;
   onNewOrder?: () => void;
+  membersTrigger?: string | null;
 }
 
 /* ───────── Small reusable bits ───────── */
@@ -372,6 +373,7 @@ function AddItemForm({
   const [quantity, setQuantity] = useState("1");
   const [requestedBy, setRequestedBy] = useState(members[0]?.name ?? "");
   const [splitType, setSplitType] = useState("self");
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [show, setShow] = useState(false);
 
@@ -388,12 +390,23 @@ function AddItemForm({
     );
   }
 
+  const toggleIndex = (i: number) =>
+    setSelectedIndices((prev) =>
+      prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i],
+    );
+
   const handleSave = async () => {
     if (!name.trim() || !price) return;
     setSaving(true);
     try {
       const bp = parseFloat(price);
       const qty = parseInt(quantity) || 1;
+      const indices =
+        splitType === "all"
+          ? members.map((_: RawMember, i: number) => i)
+          : splitType === "selected"
+            ? selectedIndices
+            : [];
       const { error } = await supabase.from("items").insert({
         order_id: orderId,
         name: name.trim(),
@@ -403,16 +416,14 @@ function AddItemForm({
         total_price: bp * qty,
         requested_by: requestedBy,
         split_type: splitType,
-        split_with_indices:
-          splitType === "all"
-            ? members.map((_: RawMember, i: number) => i)
-            : [],
+        split_with_indices: indices,
       });
       if (error) throw error;
       setName("");
       setLink("");
       setPrice("");
       setQuantity("1");
+      setSelectedIndices([]);
       setShow(false);
       onAdded();
     } catch (err) {
@@ -470,19 +481,37 @@ function AddItemForm({
           className="pl-9 bg-white"
         />
       </div>
-      <div className="flex items-center gap-3">
-        <span className="text-xs font-medium text-muted-foreground">
-          Split:
-        </span>
-        {["self", "all"].map((t) => (
-          <button
-            key={t}
-            onClick={() => setSplitType(t)}
-            className={`text-xs px-3 py-1 rounded-full border transition-colors ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-secondary"}`}
-          >
-            {t === "self" ? "Self" : "Everyone"}
-          </button>
-        ))}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-muted-foreground">
+            Split:
+          </span>
+          {["self", "all", "selected"].map((t) => (
+            <button
+              key={t}
+              onClick={() => setSplitType(t)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-secondary"}`}
+            >
+              {t === "self" ? "Self" : t === "all" ? "Everyone" : "Selected"}
+            </button>
+          ))}
+        </div>
+        {splitType === "selected" && (
+          <div className="flex flex-wrap gap-2 pl-1">
+            {members.map((m, i) => (
+              <button
+                key={m.id}
+                onClick={() => toggleIndex(i)}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-colors ${selectedIndices.includes(i) ? "bg-purple-600 text-white border-purple-600" : "bg-white text-muted-foreground hover:bg-secondary"}`}
+              >
+                <span className="w-4 h-4 rounded-full flex items-center justify-center font-bold uppercase text-[10px]">
+                  {m.name.charAt(0)}
+                </span>
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex gap-2">
         <Button
@@ -526,8 +555,16 @@ function EditableItemRow({
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [requestedBy, setRequestedBy] = useState(item.requested_by);
   const [splitType, setSplitType] = useState(item.split_type);
+  const [splitWithIndices, setSplitWithIndices] = useState<number[]>(
+    item.split_with_indices ?? [],
+  );
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const toggleEditIndex = (i: number) =>
+    setSplitWithIndices((prev) =>
+      prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i],
+    );
 
   const getMemberName = (idx: number) => members[idx]?.name ?? "—";
 
@@ -558,7 +595,9 @@ function EditableItemRow({
           split_with_indices:
             splitType === "all"
               ? members.map((_: RawMember, i: number) => i)
-              : item.split_with_indices,
+              : splitType === "selected"
+                ? splitWithIndices
+                : [],
         })
         .eq("id", item.id);
       if (error) throw error;
@@ -632,16 +671,29 @@ function EditableItemRow({
             </select>
           </td>
           <td className="px-4 py-2 hidden sm:table-cell">
-            <div className="flex gap-1">
-              {["self", "all"].map((t) => (
+            <div className="flex flex-wrap gap-1">
+              {["self", "all", "selected"].map((t) => (
                 <button
                   key={t}
                   onClick={() => setSplitType(t)}
                   className={`text-[10px] px-2 py-0.5 rounded-full border ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground"}`}
                 >
-                  {t === "self" ? "Self" : "All"}
+                  {t === "self" ? "Self" : t === "all" ? "All" : "Sel"}
                 </button>
               ))}
+              {splitType === "selected" && (
+                <div className="flex flex-wrap gap-1 mt-1 w-full">
+                  {members.map((m, i) => (
+                    <button
+                      key={m.id}
+                      onClick={() => toggleEditIndex(i)}
+                      className={`text-[10px] px-2 py-0.5 rounded-full border ${splitWithIndices.includes(i) ? "bg-purple-600 text-white border-purple-600" : "bg-white text-muted-foreground"}`}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </td>
           <td className="px-4 py-2">
@@ -666,6 +718,7 @@ function EditableItemRow({
                   setQuantity(String(item.quantity));
                   setRequestedBy(item.requested_by);
                   setSplitType(item.split_type);
+                  setSplitWithIndices(item.split_with_indices ?? []);
                   setEditing(false);
                 }}
                 className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors"
@@ -1113,6 +1166,7 @@ export function OrderHistory({
   refreshTrigger,
   filterGroupId,
   onNewOrder,
+  membersTrigger,
 }: OrderHistoryProps) {
   const [orders, setOrders] = useState<RawOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1176,7 +1230,7 @@ export function OrderHistory({
 
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders, refreshTrigger]);
+  }, [fetchOrders, refreshTrigger, membersTrigger]);
 
   return (
     <section>
