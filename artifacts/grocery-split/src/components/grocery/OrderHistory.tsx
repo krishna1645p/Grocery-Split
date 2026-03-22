@@ -92,11 +92,12 @@ function OrderCard({ order }: { order: RawOrder }) {
   const [expanded, setExpanded] = useState(false);
 
   const members = order.groups?.group_members ?? [];
-  const adj = order.adjustments[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 };
+  const adj = (order.adjustments ?? [])[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 };
+  const orderItems = order.items ?? [];
 
   const getMemberName = (idx: number) => members[idx]?.name ?? '—';
 
-  const itemsForCalc = order.items.map((i) => {
+  const itemsForCalc = orderItems.map((i) => {
     const requestedByIndex = members.findIndex((m) => m.name === i.requested_by);
     return {
       basePrice: i.base_price,
@@ -152,7 +153,7 @@ function OrderCard({ order }: { order: RawOrder }) {
               </span>
               <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Package className="w-3.5 h-3.5 shrink-0" />
-                {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                {orderItems.length} item{orderItems.length !== 1 ? 's' : ''}
               </span>
               {members.length > 0 && (
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -189,7 +190,7 @@ function OrderCard({ order }: { order: RawOrder }) {
               <div className="p-5 space-y-6">
 
                 {/* Items Table */}
-                {order.items.length > 0 && (
+                {orderItems.length > 0 && (
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
                       <Package className="w-3.5 h-3.5" /> Items
@@ -209,7 +210,7 @@ function OrderCard({ order }: { order: RawOrder }) {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
-                            {order.items.map((item) => (
+                            {orderItems.map((item) => (
                               <tr key={item.id} className="hover:bg-secondary/20 transition-colors">
                                 <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">{item.name}</td>
                                 <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(item.base_price)}</td>

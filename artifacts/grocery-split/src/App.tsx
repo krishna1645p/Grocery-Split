@@ -11,11 +11,15 @@ import { Leaf, Loader2 } from "lucide-react";
 const queryClient = new QueryClient();
 
 async function claimGroupMemberships(userId: string, email: string) {
-  await supabase
-    .from('group_members')
-    .update({ user_id: userId })
-    .eq('email', email)
-    .is('user_id', null);
+  try {
+    await supabase
+      .from('group_members')
+      .update({ user_id: userId })
+      .eq('email', email)
+      .is('user_id', null);
+  } catch {
+    // best-effort — never block sign-in
+  }
 }
 
 function App() {
