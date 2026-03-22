@@ -171,18 +171,17 @@ function EditableAdjustments({
         promo_savings: parseFloat(promoSavings) || 0,
       };
 
-      if (adj.id) {
-        const { error } = await supabase
-          .from("adjustments")
-          .update({ ...payload, updated_at: new Date().toISOString() })
-          .eq("id", adj.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("adjustments")
-          .insert({ order_id: orderId, ...payload });
-        if (error) throw error;
-      }
+      const { error } = await supabase
+        .from("adjustments")
+        .upsert(
+          {
+            order_id: orderId,
+            ...payload,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "order_id" },
+        );
+      if (error) throw error;
 
       setEditing(false);
       onSaved();
