@@ -156,6 +156,13 @@ function EditableAdjustments({
   const [tip, setTip] = useState(String(adj.tip));
   const [promoSavings, setPromoSavings] = useState(String(adj.promo_savings));
   const [saving, setSaving] = useState(false);
+  // Sync state when adj prop updates after refresh
+  useEffect(() => {
+    setTax(String(adj.tax));
+    setDelivery(String(adj.delivery));
+    setTip(String(adj.tip));
+    setPromoSavings(String(adj.promo_savings));
+  }, [adj.tax, adj.delivery, adj.tip, adj.promo_savings]);
 
   const hasAdjustments =
     adj.tax > 0 || adj.delivery > 0 || adj.tip > 0 || adj.promo_savings > 0;
@@ -171,16 +178,14 @@ function EditableAdjustments({
         promo_savings: parseFloat(promoSavings) || 0,
       };
 
-      const { error } = await supabase
-        .from("adjustments")
-        .upsert(
-          {
-            order_id: orderId,
-            ...payload,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "order_id" },
-        );
+      const { error } = await supabase.from("adjustments").upsert(
+        {
+          order_id: orderId,
+          ...payload,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "order_id" },
+      );
       if (error) throw error;
 
       setEditing(false);
