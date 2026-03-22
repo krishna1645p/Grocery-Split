@@ -783,12 +783,10 @@ function OrderCard({
   const [expanded, setExpanded] = useState(false);
 
   const members = order.groups?.group_members ?? [];
-  const adj = (order.adjustments ?? [])[0] ?? {
-    tax: 0,
-    delivery: 0,
-    tip: 0,
-    promo_savings: 0,
-  };
+  const rawAdj = order.adjustments;
+  const adj: RawAdjustment = Array.isArray(rawAdj)
+    ? (rawAdj[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 })
+    : (rawAdj ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 });
   const orderItems = order.items ?? [];
 
   const itemsForCalc = orderItems.map((i) => {
