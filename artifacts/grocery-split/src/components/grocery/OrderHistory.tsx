@@ -28,6 +28,7 @@ import {
   Trash2,
   Check,
   X,
+  Link as LinkIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -45,6 +46,7 @@ interface RawItem {
 }
 
 interface RawAdjustment {
+  id?: string;
   tax: number;
   delivery: number;
   tip: number;
@@ -137,6 +139,218 @@ function AdjustmentPill({
   );
 }
 
+/* ───────── Editable Adjustments ───────── */
+
+function EditableAdjustments({
+  orderId,
+  adj,
+  onSaved,
+}: {
+  orderId: string;
+  adj: RawAdjustment;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [tax, setTax] = useState(String(adj.tax));
+  const [delivery, setDelivery] = useState(String(adj.delivery));
+  const [tip, setTip] = useState(String(adj.tip));
+  const [promoSavings, setPromoSavings] = useState(String(adj.promo_savings));
+  const [saving, setSaving] = useState(false);
+
+  const hasAdjustments =
+    adj.tax > 0 || adj.delivery > 0 || adj.tip > 0 || adj.promo_savings > 0;
+  const totalAdjustments = adj.tax + adj.delivery + adj.tip - adj.promo_savings;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload = {
+        tax: parseFloat(tax) || 0,
+        delivery: parseFloat(delivery) || 0,
+        tip: parseFloat(tip) || 0,
+        promo_savings: parseFloat(promoSavings) || 0,
+      };
+
+      if (adj.id) {
+        const { error } = await supabase
+          .from("adjustments")
+          .update({ ...payload, updated_at: new Date().toISOString() })
+          .eq("id", adj.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("adjustments")
+          .insert({ order_id: orderId, ...payload });
+        if (error) throw error;
+      }
+
+      setEditing(false);
+      onSaved();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save adjustments");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+            <Receipt className="w-3.5 h-3.5" /> Edit Adjustments
+          </h4>
+        </div>
+        <div className="border rounded-xl p-4 bg-secondary/20 space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <Receipt className="w-3 h-3 text-red-400" /> Tax
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                value={tax}
+                onChange={(e) => setTax(e.target.value)}
+                className="bg-white h-9"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <Truck className="w-3 h-3 text-orange-400" /> Delivery
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                value={delivery}
+                onChange={(e) => setDelivery(e.target.value)}
+                className="bg-white h-9"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <HeartHandshake className="w-3 h-3 text-amber-400" /> Tip
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                value={tip}
+                onChange={(e) => setTip(e.target.value)}
+                className="bg-white h-9"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <Tags className="w-3 h-3 text-primary" /> Promo Savings
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                value={promoSavings}
+                onChange={(e) => setPromoSavings(e.target.value)}
+                className="bg-white h-9"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving}
+              className="gap-1.5"
+            >
+              {saving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setTax(String(adj.tax));
+                setDelivery(String(adj.delivery));
+                setTip(String(adj.tip));
+                setPromoSavings(String(adj.promo_savings));
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+          <Receipt className="w-3.5 h-3.5" /> Adjustments
+        </h4>
+        <button
+          onClick={() => setEditing(true)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+          title="Edit adjustments"
+        >
+          <Pencil className="w-3 h-3" /> Edit
+        </button>
+      </div>
+      {hasAdjustments ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+            <AdjustmentPill
+              icon={<Receipt className="w-4 h-4 text-red-400" />}
+              label="Tax"
+              value={adj.tax}
+              positive={true}
+            />
+            <AdjustmentPill
+              icon={<Truck className="w-4 h-4 text-orange-400" />}
+              label="Delivery"
+              value={adj.delivery}
+              positive={true}
+            />
+            <AdjustmentPill
+              icon={<HeartHandshake className="w-4 h-4 text-amber-400" />}
+              label="Tip"
+              value={adj.tip}
+              positive={true}
+            />
+            <AdjustmentPill
+              icon={<Tags className="w-4 h-4 text-primary" />}
+              label="Promo"
+              value={adj.promo_savings}
+              positive={false}
+            />
+          </div>
+          {totalAdjustments !== 0 && (
+            <p className="text-xs text-muted-foreground mt-2 px-1">
+              Net adjustment:{" "}
+              <span
+                className={`font-semibold font-mono ${totalAdjustments > 0 ? "text-orange-600" : "text-primary"}`}
+              >
+                {totalAdjustments > 0 ? "+" : ""}
+                {formatCurrency(totalAdjustments)}
+              </span>
+            </p>
+          )}
+        </>
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          className="w-full border border-dashed rounded-xl p-4 text-sm text-muted-foreground hover:bg-secondary/20 hover:text-foreground transition-colors text-center"
+        >
+          + Add tax, delivery, tip, or promo savings
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ───────── Add Item Form ───────── */
 
 function AddItemForm({
@@ -149,6 +363,7 @@ function AddItemForm({
   onAdded: () => void;
 }) {
   const [name, setName] = useState("");
+  const [link, setLink] = useState("");
   const [price, setPrice] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [requestedBy, setRequestedBy] = useState(members[0]?.name ?? "");
@@ -178,6 +393,7 @@ function AddItemForm({
       const { error } = await supabase.from("items").insert({
         order_id: orderId,
         name: name.trim(),
+        link: link.trim() || null,
         base_price: bp,
         quantity: qty,
         total_price: bp * qty,
@@ -190,6 +406,7 @@ function AddItemForm({
       });
       if (error) throw error;
       setName("");
+      setLink("");
       setPrice("");
       setQuantity("1");
       setShow(false);
@@ -239,6 +456,15 @@ function AddItemForm({
             </option>
           ))}
         </select>
+      </div>
+      <div className="relative">
+        <LinkIcon className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground/60" />
+        <Input
+          placeholder="Product link (optional) — e.g. https://walmart.com/..."
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          className="pl-9 bg-white"
+        />
       </div>
       <div className="flex items-center gap-3">
         <span className="text-xs font-medium text-muted-foreground">
@@ -291,6 +517,7 @@ function EditableItemRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
+  const [link, setLink] = useState(item.link ?? "");
   const [price, setPrice] = useState(String(item.base_price));
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [requestedBy, setRequestedBy] = useState(item.requested_by);
@@ -318,6 +545,7 @@ function EditableItemRow({
         .from("items")
         .update({
           name: name.trim(),
+          link: link.trim() || null,
           base_price: bp,
           quantity: qty,
           total_price: bp * qty,
@@ -355,98 +583,130 @@ function EditableItemRow({
 
   if (editing) {
     return (
-      <tr className="bg-primary/5">
-        <td className="px-4 py-2">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-8 text-sm bg-white"
-          />
-        </td>
-        <td className="px-4 py-2">
-          <Input
-            type="number"
-            step="0.01"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="h-8 text-sm text-right bg-white w-20"
-          />
-        </td>
-        <td className="px-4 py-2">
-          <Input
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="h-8 text-sm text-center bg-white w-14"
-          />
-        </td>
-        <td className="px-4 py-2 text-right font-mono text-sm font-semibold">
-          {formatCurrency((parseFloat(price) || 0) * (parseInt(quantity) || 1))}
-        </td>
-        <td className="px-4 py-2 hidden md:table-cell">
-          <select
-            value={requestedBy}
-            onChange={(e) => setRequestedBy(e.target.value)}
-            className="border rounded px-2 py-1 text-sm bg-white h-8"
-          >
-            {members.map((m) => (
-              <option key={m.id} value={m.name}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </td>
-        <td className="px-4 py-2 hidden sm:table-cell">
-          <div className="flex gap-1">
-            {["self", "all"].map((t) => (
+      <>
+        <tr className="bg-primary/5">
+          <td className="px-4 py-2">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-8 text-sm bg-white"
+            />
+          </td>
+          <td className="px-4 py-2">
+            <Input
+              type="number"
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="h-8 text-sm text-right bg-white w-20"
+            />
+          </td>
+          <td className="px-4 py-2">
+            <Input
+              type="number"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="h-8 text-sm text-center bg-white w-14"
+            />
+          </td>
+          <td className="px-4 py-2 text-right font-mono text-sm font-semibold">
+            {formatCurrency(
+              (parseFloat(price) || 0) * (parseInt(quantity) || 1),
+            )}
+          </td>
+          <td className="px-4 py-2 hidden md:table-cell">
+            <select
+              value={requestedBy}
+              onChange={(e) => setRequestedBy(e.target.value)}
+              className="border rounded px-2 py-1 text-sm bg-white h-8"
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.name}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </td>
+          <td className="px-4 py-2 hidden sm:table-cell">
+            <div className="flex gap-1">
+              {["self", "all"].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSplitType(t)}
+                  className={`text-[10px] px-2 py-0.5 rounded-full border ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground"}`}
+                >
+                  {t === "self" ? "Self" : "All"}
+                </button>
+              ))}
+            </div>
+          </td>
+          <td className="px-4 py-2">
+            <div className="flex items-center gap-1">
               <button
-                key={t}
-                onClick={() => setSplitType(t)}
-                className={`text-[10px] px-2 py-0.5 rounded-full border ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground"}`}
+                onClick={handleSave}
+                disabled={saving}
+                className="w-7 h-7 rounded-full flex items-center justify-center bg-primary text-white hover:bg-primary/90 transition-colors"
+                title="Save"
               >
-                {t === "self" ? "Self" : "All"}
+                {saving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
               </button>
-            ))}
-          </div>
-        </td>
-        <td className="px-4 py-2">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="w-7 h-7 rounded-full flex items-center justify-center bg-primary text-white hover:bg-primary/90 transition-colors"
-              title="Save"
-            >
-              {saving ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Check className="w-3.5 h-3.5" />
-              )}
-            </button>
-            <button
-              onClick={() => {
-                setName(item.name);
-                setPrice(String(item.base_price));
-                setQuantity(String(item.quantity));
-                setRequestedBy(item.requested_by);
-                setSplitType(item.split_type);
-                setEditing(false);
-              }}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors"
-              title="Cancel"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </td>
-      </tr>
+              <button
+                onClick={() => {
+                  setName(item.name);
+                  setLink(item.link ?? "");
+                  setPrice(String(item.base_price));
+                  setQuantity(String(item.quantity));
+                  setRequestedBy(item.requested_by);
+                  setSplitType(item.split_type);
+                  setEditing(false);
+                }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors"
+                title="Cancel"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </td>
+        </tr>
+        <tr className="bg-primary/5 border-b">
+          <td colSpan={7} className="px-4 pb-3 pt-0">
+            <div className="relative max-w-md">
+              <LinkIcon className="absolute left-3 top-2 w-3.5 h-3.5 text-muted-foreground/60" />
+              <Input
+                placeholder="Product link (optional)"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                className="h-8 text-sm bg-white pl-9"
+              />
+            </div>
+          </td>
+        </tr>
+      </>
     );
   }
 
   return (
     <tr className="hover:bg-secondary/20 transition-colors group">
-      <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
-        {item.name}
+      <td className="px-4 py-3 font-medium text-foreground">
+        <div className="flex items-center gap-2">
+          <span className="whitespace-nowrap">{item.name}</span>
+          {item.link && (
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+              title={item.link}
+            >
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 text-right font-mono text-muted-foreground">
         {formatCurrency(item.base_price)}
@@ -501,18 +761,6 @@ function EditableItemRow({
               <Trash2 className="w-3.5 h-3.5" />
             )}
           </button>
-          {item.link ? (
-            <a
-              href={item.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
-              title="Open link"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          ) : null}
         </div>
       </td>
     </tr>
@@ -561,9 +809,6 @@ function OrderCard({
 
   const { personSummaries, totalItemsSubtotal, totalAdjustments, grandTotal } =
     computePersonSummaries(members, itemsForCalc, adjForCalc);
-
-  const hasAdjustments =
-    adj.tax > 0 || adj.delivery > 0 || adj.tip > 0 || adj.promo_savings > 0;
 
   const createdAt = new Date(order.created_at).toLocaleDateString("en-US", {
     year: "numeric",
@@ -717,53 +962,12 @@ function OrderCard({
                   onAdded={onRefresh}
                 />
 
-                {/* Adjustments */}
-                {hasAdjustments && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                      <Receipt className="w-3.5 h-3.5" /> Adjustments
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-                      <AdjustmentPill
-                        icon={<Receipt className="w-4 h-4 text-red-400" />}
-                        label="Tax"
-                        value={adj.tax}
-                        positive={true}
-                      />
-                      <AdjustmentPill
-                        icon={<Truck className="w-4 h-4 text-orange-400" />}
-                        label="Delivery"
-                        value={adj.delivery}
-                        positive={true}
-                      />
-                      <AdjustmentPill
-                        icon={
-                          <HeartHandshake className="w-4 h-4 text-amber-400" />
-                        }
-                        label="Tip"
-                        value={adj.tip}
-                        positive={true}
-                      />
-                      <AdjustmentPill
-                        icon={<Tags className="w-4 h-4 text-primary" />}
-                        label="Promo"
-                        value={adj.promo_savings}
-                        positive={false}
-                      />
-                    </div>
-                    {totalAdjustments !== 0 && (
-                      <p className="text-xs text-muted-foreground mt-2 px-1">
-                        Net adjustment:{" "}
-                        <span
-                          className={`font-semibold font-mono ${totalAdjustments > 0 ? "text-orange-600" : "text-primary"}`}
-                        >
-                          {totalAdjustments > 0 ? "+" : ""}
-                          {formatCurrency(totalAdjustments)}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-                )}
+                {/* Adjustments (editable) */}
+                <EditableAdjustments
+                  orderId={order.id}
+                  adj={adj}
+                  onSaved={onRefresh}
+                />
 
                 {/* Per-Person Breakdown */}
                 {personSummaries.length > 0 && (
@@ -920,7 +1124,7 @@ export function OrderHistory({
             group_members ( id, name, email )
           ),
           items ( id, name, link, base_price, quantity, requested_by, split_type, split_with_indices ),
-          adjustments ( tax, delivery, tip, promo_savings )
+          adjustments ( id, tax, delivery, tip, promo_savings )
         `,
         )
         .in("group_id", groupIds)
