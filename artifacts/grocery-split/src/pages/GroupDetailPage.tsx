@@ -1,8 +1,19 @@
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Users, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  ArrowLeft,
+  Plus,
+  Users,
+  Trash2,
+  UserPlus,
+  Check,
+  X,
+  Loader2,
+} from "lucide-react";
 import { OrderHistory } from "@/components/grocery/OrderHistory";
 // @ts-ignore
 import { supabase } from "@/lib/supabase";
+import { useState } from "react";
 
 export interface GroupMember {
   id: string;
@@ -18,7 +29,96 @@ interface GroupDetailPageProps {
   members: GroupMember[];
   onBack: () => void;
   onNewOrder: () => void;
+  onMembersChanged?: () => void;
   refreshTrigger?: string | null;
+}
+
+function AddMemberForm({
+  groupId,
+  onAdded,
+  onCancel,
+}: {
+  groupId: string;
+  onAdded: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      if (email.trim()) {
+        const { data: existing } = await supabase
+          .from("group_members")
+          .select("id")
+          .eq("group_id", groupId)
+          .eq("email", email.trim())
+          .maybeSingle();
+
+        if (existing) {
+          alert("A member with this email is already in the group.");
+          setSaving(false);
+          return;
+        }
+      }
+
+      const { error } = await supabase.from("group_members").insert({
+        group_id: groupId,
+        name: name.trim(),
+        email: email.trim() || null,
+        user_id: null,
+      });
+
+      if (error) throw error;
+      onAdded();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to add member");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm">
+      <Input
+        placeholder="Name *"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="h-8 text-sm w-32 border-0 shadow-none focus-visible:ring-0 px-1"
+        autoFocus
+      />
+      <Input
+        placeholder="Email (optional)"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleSave()}
+        className="h-8 text-sm w-48 border-0 shadow-none focus-visible:ring-0 px-1"
+      />
+      <button
+        onClick={handleSave}
+        disabled={saving || !name.trim()}
+        className="w-7 h-7 rounded-full flex items-center justify-center bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
+        title="Add member"
+      >
+        {saving ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Check className="w-3.5 h-3.5" />
+        )}
+      </button>
+      <button
+        onClick={onCancel}
+        className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors shrink-0"
+        title="Cancel"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
 }
 
 export function GroupDetailPage({
@@ -28,8 +128,16 @@ export function GroupDetailPage({
   members,
   onBack,
   onNewOrder,
+  onMembersChanged,
   refreshTrigger,
 }: GroupDetailPageProps) {
+  const [addingMember, setAddingMember] = useState(false);
+
+  const handleMemberAdded = () => {
+    setAddingMember(false);
+    onMembersChanged?.();
+  };
+
   return (
     <div className="min-h-screen bg-background pb-16">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b shadow-sm">
@@ -105,6 +213,22 @@ export function GroupDetailPage({
               </div>
             </div>
           ))}
+
+          {addingMember ? (
+            <AddMemberForm
+              groupId={groupId}
+              onAdded={handleMemberAdded}
+              onCancel={() => setAddingMember(false)}
+            />
+          ) : (
+            <button
+              onClick={() => setAddingMember(true)}
+              className="flex items-center gap-1.5 border border-dashed rounded-full pl-2.5 pr-3 py-1 text-sm text-muted-foreground hover:text-primary hover:border-primary hover:bg-primary/5 transition-colors"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Add Member
+            </button>
+          )}
         </div>
 
         <OrderHistory

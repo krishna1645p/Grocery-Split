@@ -129,6 +129,14 @@ function App() {
               })
             }
             refreshTrigger={lastOrderId}
+            onMembersChanged={async () => {
+              const { data } = await supabase
+                .from('groups')
+                .select('id, name, created_by, group_members ( id, name, email, user_id )')
+                .eq('id', screen.type === 'group-detail' ? screen.group.id : '')
+                .single();
+              if (data) setScreen({ type: 'group-detail', group: data as GroupRow });
+            }}
           />
         )}
 
