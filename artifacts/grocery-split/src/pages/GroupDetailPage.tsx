@@ -1,6 +1,6 @@
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Plus, Users } from 'lucide-react';
-import { OrderHistory } from '@/components/grocery/OrderHistory';
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Plus, Users } from "lucide-react";
+import { OrderHistory } from "@/components/grocery/OrderHistory";
 
 export interface GroupMember {
   id: string;
@@ -63,7 +63,14 @@ export function GroupDetailPage({
               <div className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-bold uppercase">
                 {m.name.charAt(0)}
               </div>
-              <span className="text-sm font-medium">{m.name}</span>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">{m.name}</span>
+                {m.email && (
+                  <span className="text-xs text-muted-foreground">
+                    {m.email}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
         </div>
