@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/Home";
+import { GroupsPage, type GroupRow } from "@/pages/GroupsPage";
+import { GroupDetailPage, type GroupMember } from "@/pages/GroupDetailPage";
 import { Leaf, Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -22,9 +24,16 @@ async function claimGroupMemberships(userId: string, email: string) {
   }
 }
 
+type Screen =
+  | { type: 'groups' }
+  | { type: 'group-detail'; group: GroupRow }
+  | { type: 'new-order'; group: GroupRow; members: GroupMember[] };
+
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [screen, setScreen] = useState<Screen>({ type: 'groups' });
+  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
@@ -57,8 +66,8 @@ function App() {
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) alert(error.message);
+    await supabase.auth.signOut();
+    setScreen({ type: 'groups' });
   };
 
   if (loading) {
@@ -96,11 +105,48 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Home
-          userId={session.user.id}
-          userEmail={session.user.email}
-          onSignOut={signOut}
-        />
+        {screen.type === 'groups' && (
+          <GroupsPage
+            userId={session.user.id}
+            userEmail={session.user.email}
+            onGroupClick={(group) => setScreen({ type: 'group-detail', group })}
+            onSignOut={signOut}
+          />
+        )}
+
+        {screen.type === 'group-detail' && (
+          <GroupDetailPage
+            userId={session.user.id}
+            groupId={screen.group.id}
+            groupName={screen.group.name}
+            members={screen.group.group_members ?? []}
+            onBack={() => setScreen({ type: 'groups' })}
+            onNewOrder={() =>
+              setScreen({
+                type: 'new-order',
+                group: screen.group,
+                members: screen.group.group_members ?? [],
+              })
+            }
+            refreshTrigger={lastOrderId}
+          />
+        )}
+
+        {screen.type === 'new-order' && (
+          <Home
+            key={`order-${screen.group.id}`}
+            userId={session.user.id}
+            groupId={screen.group.id}
+            groupName={screen.group.name}
+            members={screen.members}
+            onBack={() => setScreen({ type: 'group-detail', group: screen.group })}
+            onOrderSubmitted={(orderId) => {
+              setLastOrderId(orderId);
+              setScreen({ type: 'group-detail', group: screen.group });
+            }}
+          />
+        )}
+
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

@@ -3,6 +3,7 @@ import { supabase } from '../../../../../lib/supabase';
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { computePersonSummaries } from "@/hooks/use-grocery-store";
 import {
@@ -21,6 +22,7 @@ import {
   HeartHandshake,
   Tags,
   Users,
+  Plus,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -65,6 +67,8 @@ interface RawOrder {
 interface OrderHistoryProps {
   userId: string;
   refreshTrigger?: string | null;
+  filterGroupId?: string;
+  onNewOrder?: () => void;
 }
 
 function SplitBadge({ type }: { type: string }) {
@@ -361,7 +365,7 @@ function OrderCard({ order }: { order: RawOrder }) {
   );
 }
 
-export function OrderHistory({ userId, refreshTrigger }: OrderHistoryProps) {
+export function OrderHistory({ userId, refreshTrigger, filterGroupId, onNewOrder }: OrderHistoryProps) {
   const [orders, setOrders] = useState<RawOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -373,22 +377,24 @@ export function OrderHistory({ userId, refreshTrigger }: OrderHistoryProps) {
       setLoading(true);
       setError(null);
       try {
-        // Step 1: find all group_ids where this user is a member
-        const { data: memberRows, error: memberError } = await supabase
-          .from('group_members')
-          .select('group_id')
-          .eq('user_id', userId);
+        let groupIds: string[];
 
-        if (memberError) throw memberError;
-
-        const groupIds: string[] = [...new Set((memberRows ?? []).map((r: { group_id: string }) => r.group_id))];
+        if (filterGroupId) {
+          groupIds = [filterGroupId];
+        } else {
+          const { data: memberRows, error: memberError } = await supabase
+            .from('group_members')
+            .select('group_id')
+            .eq('user_id', userId);
+          if (memberError) throw memberError;
+          groupIds = [...new Set((memberRows ?? []).map((r: { group_id: string }) => r.group_id))];
+        }
 
         if (groupIds.length === 0) {
           if (!cancelled) { setOrders([]); setLoading(false); }
           return;
         }
 
-        // Step 2: fetch all orders belonging to those groups, with related data
         const { data, error: fetchError } = await supabase
           .from('orders')
           .select(`
@@ -419,7 +425,7 @@ export function OrderHistory({ userId, refreshTrigger }: OrderHistoryProps) {
 
     fetchOrders();
     return () => { cancelled = true; };
-  }, [userId, refreshTrigger]);
+  }, [userId, refreshTrigger, filterGroupId]);
 
   return (
     <section>
@@ -430,7 +436,7 @@ export function OrderHistory({ userId, refreshTrigger }: OrderHistoryProps) {
         <div>
           <h2 className="text-2xl font-bold">Order History</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            All orders where you're a group member
+            {filterGroupId ? 'Orders in this group' : 'All orders where you\'re a group member'}
           </p>
         </div>
         {orders.length > 0 && (
@@ -441,7 +447,7 @@ export function OrderHistory({ userId, refreshTrigger }: OrderHistoryProps) {
       {loading && (
         <div className="flex items-center justify-center py-16 text-muted-foreground gap-3">
           <Loader2 className="w-5 h-5 animate-spin" />
-          Loading your orders...
+          Loading orders...
         </div>
       )}
 
@@ -457,9 +463,16 @@ export function OrderHistory({ userId, refreshTrigger }: OrderHistoryProps) {
             <ShoppingBasket className="w-8 h-8 text-muted-foreground/50" />
           </div>
           <h3 className="text-xl font-bold text-foreground mb-2">No orders yet</h3>
-          <p className="text-muted-foreground max-w-sm text-sm">
-            Submit your first order above and it'll appear here. Click any order card to expand the full breakdown.
+          <p className="text-muted-foreground max-w-sm text-sm mb-4">
+            {filterGroupId
+              ? 'No orders in this group yet. Create your first one!'
+              : 'Submit your first order and it\'ll appear here.'}
           </p>
+          {filterGroupId && onNewOrder && (
+            <Button onClick={onNewOrder} className="gap-2">
+              <Plus className="w-4 h-4" /> Create First Order
+            </Button>
+          )}
         </Card>
       )}
 

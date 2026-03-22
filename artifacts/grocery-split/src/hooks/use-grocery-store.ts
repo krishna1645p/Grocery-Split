@@ -35,8 +35,6 @@ export interface PersonSummary {
   finalPayable: number;
 }
 
-export const DEFAULT_PARTICIPANTS: Participant[] = [];
-
 export function computePersonSummaries(
   participants: { name: string }[],
   items: Pick<GroceryItem, 'basePrice' | 'quantity' | 'requestedByIndex' | 'splitType' | 'splitWithIndices'>[],
@@ -48,6 +46,8 @@ export function computePersonSummaries(
   grandTotal: number;
 } {
   const n = participants.length;
+  if (n === 0) return { personSummaries: [], totalItemsSubtotal: 0, totalAdjustments: 0, grandTotal: 0 };
+
   const personItemTotals = new Array(n).fill(0);
   let totalItemsSubtotal = 0;
 
@@ -94,10 +94,9 @@ export function computePersonSummaries(
   };
 }
 
-export function useGroceryStore(userId?: string) {
-  const [orderName, setOrderName] = useState('Roommate Grocery Run');
+export function useGroceryStore(userId: string, participants: Participant[]) {
+  const [orderName, setOrderName] = useState('');
   const [storeName, setStoreName] = useState('Walmart');
-  const [participants, setParticipants] = useState<Participant[]>(DEFAULT_PARTICIPANTS);
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustments>({
     tax: 0,
@@ -120,77 +119,29 @@ export function useGroceryStore(userId?: string) {
     setItems([]);
   }, []);
 
-  const updateParticipant = useCallback(
-    (index: number, updates: Partial<Participant>) => {
-      setParticipants((prev) => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], ...updates };
-        if (updates.name !== undefined && !updates.name.trim()) {
-          updated[index].name = `Roommate ${index + 1}`;
-        }
-        return updated;
-      });
-    },
-    [],
-  );
-
-  const addParticipant = useCallback((participant: Participant) => {
-    setParticipants((prev) => [...prev, participant]);
-  }, []);
-
-  const removeParticipant = useCallback((index: number) => {
-    setParticipants((prev) => {
-      if (prev.length === 0) return prev;
-      return prev.filter((_, i) => i !== index);
-    });
-    setItems((prev) =>
-      prev
-        .filter((item) => item.requestedByIndex !== index)
-        .map((item) => ({
-          ...item,
-          requestedByIndex:
-            item.requestedByIndex > index
-              ? item.requestedByIndex - 1
-              : item.requestedByIndex,
-          splitWithIndices: item.splitWithIndices
-            .filter((i) => i !== index)
-            .map((i) => (i > index ? i - 1 : i)),
-        })),
-    );
-  }, []);
-
   const updateAdjustments = useCallback((updates: Partial<Adjustments>) => {
     setAdjustments((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  const submitOrder = useCallback(async (): Promise<string> => {
+  const reset = useCallback(() => {
+    setOrderName('');
+    setStoreName('Walmart');
+    setItems([]);
+    setAdjustments({ tax: 0, delivery: 0, tip: 0, promo: 0 });
+    setLastSubmittedOrderId(null);
+  }, []);
+
+  const submitOrder = useCallback(async (groupId: string): Promise<string> => {
     if (!userId) throw new Error('Must be signed in to submit an order');
+    if (!orderName.trim()) throw new Error('Order name is required');
     setIsSubmitting(true);
     try {
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .insert({ name: orderName, created_by: userId })
-        .select()
-        .single();
-      if (groupError) throw groupError;
-
-      const membersPayload = participants.map((p) => ({
-        group_id: group.id,
-        name: p.name,
-        email: p.email || null,
-        user_id: userId,
-      }));
-      const { error: membersError } = await supabase
-        .from('group_members')
-        .insert(membersPayload);
-      if (membersError) throw membersError;
-
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          group_id: group.id,
+          group_id: groupId,
           store: storeName,
-          order_name: orderName,
+          order_name: orderName.trim(),
           created_by: userId,
         })
         .select()
@@ -209,9 +160,7 @@ export function useGroceryStore(userId?: string) {
           split_type: item.splitType,
           split_with_indices: item.splitWithIndices,
         }));
-        const { error: itemsError } = await supabase
-          .from('items')
-          .insert(itemsPayload);
+        const { error: itemsError } = await supabase.from('items').insert(itemsPayload);
         if (itemsError) throw itemsError;
       }
 
@@ -241,10 +190,6 @@ export function useGroceryStore(userId?: string) {
     setOrderName,
     storeName,
     setStoreName,
-    participants,
-    updateParticipant,
-    addParticipant,
-    removeParticipant,
     items,
     addItem,
     deleteItem,
@@ -255,5 +200,6 @@ export function useGroceryStore(userId?: string) {
     submitOrder,
     isSubmitting,
     lastSubmittedOrderId,
+    reset,
   };
 }

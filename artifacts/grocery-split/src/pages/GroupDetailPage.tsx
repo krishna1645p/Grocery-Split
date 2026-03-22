@@ -1,0 +1,80 @@
+import { Button } from '@/components/ui/button';
+import { ArrowLeft, Plus, Users } from 'lucide-react';
+import { OrderHistory } from '@/components/grocery/OrderHistory';
+
+export interface GroupMember {
+  id: string;
+  name: string;
+  email: string | null;
+  user_id: string | null;
+}
+
+interface GroupDetailPageProps {
+  userId: string;
+  groupId: string;
+  groupName: string;
+  members: GroupMember[];
+  onBack: () => void;
+  onNewOrder: () => void;
+  refreshTrigger?: string | null;
+}
+
+export function GroupDetailPage({
+  userId,
+  groupId,
+  groupName,
+  members,
+  onBack,
+  onNewOrder,
+  refreshTrigger,
+}: GroupDetailPageProps) {
+  return (
+    <div className="min-h-screen bg-background pb-16">
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Groups</span>
+          </button>
+          <span className="text-muted-foreground/50">/</span>
+          <h1 className="font-bold text-lg truncate flex-1">{groupName}</h1>
+          <Button onClick={onNewOrder} className="gap-2 shrink-0">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">New Order</span>
+            <span className="sm:hidden">Order</span>
+          </Button>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground mr-1">
+            <Users className="w-4 h-4" /> Members:
+          </span>
+          {members.map((m, idx) => (
+            <div
+              key={m.id ?? idx}
+              className="flex items-center gap-1.5 bg-white border rounded-full pl-2.5 pr-3 py-1 shadow-sm"
+              title={m.email ?? undefined}
+            >
+              <div className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-bold uppercase">
+                {m.name.charAt(0)}
+              </div>
+              <span className="text-sm font-medium">{m.name}</span>
+            </div>
+          ))}
+        </div>
+
+        <OrderHistory
+          userId={userId}
+          filterGroupId={groupId}
+          refreshTrigger={refreshTrigger}
+          onNewOrder={onNewOrder}
+        />
+      </main>
+    </div>
+  );
+}

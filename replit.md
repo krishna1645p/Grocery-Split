@@ -91,6 +91,36 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/grocery-split` (`@workspace/grocery-split`)
+
+React + Vite web app. **GrocerySplit** — Splitwise-style roommate grocery order tracker.
+
+**Auth**: Supabase Google OAuth. On sign-in, `claimGroupMemberships` stamps `user_id` on any `group_members` rows matching the user's email for history sharing.
+
+**Navigation model** (state-machine in `App.tsx`):
+- `groups` screen → `GroupsPage` (landing after login, lists all groups user belongs to)
+- `group-detail` screen → `GroupDetailPage` (orders in a group, member list)
+- `new-order` screen → `Home` (order creation form, bound to a group)
+
+**Key files**:
+- `src/App.tsx` — auth + screen routing state machine
+- `src/pages/GroupsPage.tsx` — groups landing; fetches via `group_members` join
+- `src/pages/GroupDetailPage.tsx` — single group view, shows `OrderHistory` filtered by `group_id`
+- `src/pages/Home.tsx` — order form; receives `groupId` + `members` from nav state; no participant mgmt UI
+- `src/components/groups/CreateGroupDialog.tsx` — create group + invite members modal
+- `src/hooks/use-grocery-store.ts` — order state; `useGroceryStore(userId, participants)` where participants come from the group's `group_members`; `submitOrder(groupId)` creates order+items+adjustments only
+- `src/components/grocery/OrderHistory.tsx` — supports `filterGroupId` prop to filter by group, or falls back to all groups user is a member of
+- `src/components/grocery/OrderHeader.tsx` — order name + store name only (no participant mgmt)
+
+**Supabase schema** (exact column names — do not rename):
+- `groups`: `id`, `name`, `created_by`, `created_at`
+- `group_members`: `id`, `group_id`, `user_id`, `email`, `name`, `created_at`
+- `orders`: `id`, `group_id`, `store`, `order_name`, `created_by`, `created_at`
+- `items`: `id`, `order_id`, `name`, `link`, `base_price`, `quantity`, `total_price`, `requested_by` (TEXT name, not index), `split_type`, `split_with_indices`, `created_at`
+- `adjustments`: `id`, `order_id`, `tax`, `delivery`, `tip`, `promo_savings`, `updated_at`
+
+**Supabase client**: `lib/supabase.js` at workspace root — imported as `../../../lib/supabase` from `artifacts/grocery-split/src/`, `../../../../lib/supabase` from `src/pages/`, `../../../../../lib/supabase` from `src/components/*/`.
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
