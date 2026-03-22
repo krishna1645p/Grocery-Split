@@ -834,8 +834,23 @@ function OrderCard({
   onRefresh: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [liveMembers, setLiveMembers] = useState<RawMember[]>(
+    order.groups?.group_members ?? [],
+  );
 
-  const members = order.groups?.group_members ?? [];
+  // Re-fetch members whenever the card is expanded or order changes
+  useEffect(() => {
+    if (!order.groups?.id) return;
+    supabase
+      .from("group_members")
+      .select("id, name, email")
+      .eq("group_id", order.groups.id)
+      .then(({ data }) => {
+        if (data && data.length > 0) setLiveMembers(data as RawMember[]);
+      });
+  }, [order.groups?.id, expanded]);
+
+  const members = liveMembers;
   const rawAdj = order.adjustments;
   const adj: RawAdjustment = Array.isArray(rawAdj)
     ? (rawAdj[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 })
