@@ -1,5 +1,5 @@
 // @ts-ignore
-import { supabase } from '../../../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { useState, useMemo, useCallback } from 'react';
 
 export type SplitType = 'self' | 'all' | 'selected';

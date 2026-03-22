@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Users } from "lucide-react";
+import { ArrowLeft, Plus, Users, Trash2 } from "lucide-react";
 import { OrderHistory } from "@/components/grocery/OrderHistory";
+// @ts-ignore
+import { supabase } from "@/lib/supabase";
 
 export interface GroupMember {
   id: string;
@@ -41,11 +43,41 @@ export function GroupDetailPage({
           </button>
           <span className="text-muted-foreground/50">/</span>
           <h1 className="font-bold text-lg truncate flex-1">{groupName}</h1>
-          <Button onClick={onNewOrder} className="gap-2 shrink-0">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Order</span>
-            <span className="sm:hidden">Order</span>
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button onClick={onNewOrder} className="gap-2">
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">New Order</span>
+              <span className="sm:hidden">Order</span>
+            </Button>
+            <button
+              onClick={async () => {
+                if (
+                  !confirm(
+                    `Delete group "${groupName}"? This will remove all orders, items, and members.`,
+                  )
+                )
+                  return;
+                try {
+                  const { error } = await supabase
+                    .from("groups")
+                    .delete()
+                    .eq("id", groupId);
+                  if (error) throw error;
+                  onBack();
+                } catch (err) {
+                  alert(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to delete group",
+                  );
+                }
+              }}
+              className="p-2 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              title="Delete group"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 

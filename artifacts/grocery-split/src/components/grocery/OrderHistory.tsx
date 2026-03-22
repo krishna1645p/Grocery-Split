@@ -1,5 +1,5 @@
 // @ts-ignore
-import { supabase } from "../../../../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -156,7 +156,7 @@ function EditableAdjustments({
   const [tip, setTip] = useState(String(adj.tip));
   const [promoSavings, setPromoSavings] = useState(String(adj.promo_savings));
   const [saving, setSaving] = useState(false);
-  // Sync state when adj prop updates after refresh
+
   useEffect(() => {
     setTax(String(adj.tax));
     setDelivery(String(adj.delivery));
@@ -1064,6 +1064,39 @@ function OrderCard({
                     </div>
                   </div>
                 )}
+
+                {/* Delete Order */}
+                <div className="flex justify-end pt-2 border-t border-dashed">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 gap-1.5"
+                    onClick={async () => {
+                      if (
+                        !confirm(
+                          `Delete order "${order.order_name}"? This will remove all items and adjustments.`,
+                        )
+                      )
+                        return;
+                      try {
+                        const { error } = await supabase
+                          .from("orders")
+                          .delete()
+                          .eq("id", order.id);
+                        if (error) throw error;
+                        onRefresh();
+                      } catch (err) {
+                        alert(
+                          err instanceof Error
+                            ? err.message
+                            : "Failed to delete order",
+                        );
+                      }
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Order
+                  </Button>
+                </div>
               </div>
             </div>
           </motion.div>

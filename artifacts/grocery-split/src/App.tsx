@@ -1,5 +1,5 @@
 // @ts-ignore
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
