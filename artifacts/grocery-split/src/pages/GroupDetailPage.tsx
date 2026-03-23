@@ -11,6 +11,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { OrderHistory } from "@/components/grocery/OrderHistory";
+import { BalancesTab } from "@/components/BalancesTab";
 // @ts-ignore
 import { supabase } from "@/lib/supabase";
 import { useState } from "react";
@@ -31,6 +32,7 @@ interface GroupDetailPageProps {
   onNewOrder: () => void;
   onMembersChanged?: () => void;
   refreshTrigger?: string | null;
+  membersTrigger?: string | null;
 }
 
 function AddMemberForm({
@@ -130,8 +132,10 @@ export function GroupDetailPage({
   onNewOrder,
   onMembersChanged,
   refreshTrigger,
+  membersTrigger,
 }: GroupDetailPageProps) {
   const [addingMember, setAddingMember] = useState(false);
+  const [activeTab, setActiveTab] = useState<"orders" | "balances">("orders");
 
   const handleMemberAdded = () => {
     setAddingMember(false);
@@ -190,6 +194,7 @@ export function GroupDetailPage({
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {/* Members row */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground mr-1">
             <Users className="w-4 h-4" /> Members:
@@ -231,12 +236,36 @@ export function GroupDetailPage({
           )}
         </div>
 
-        <OrderHistory
-          userId={userId}
-          filterGroupId={groupId}
-          refreshTrigger={refreshTrigger}
-          onNewOrder={onNewOrder}
-        />
+        {/* Tab switcher */}
+        <div className="flex gap-1 bg-secondary/50 rounded-xl p-1 w-fit">
+          {(["orders", "balances"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+                activeTab === tab
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        {activeTab === "orders" && (
+          <OrderHistory
+            userId={userId}
+            filterGroupId={groupId}
+            refreshTrigger={refreshTrigger}
+            onNewOrder={onNewOrder}
+          />
+        )}
+
+        {activeTab === "balances" && (
+          <BalancesTab groupId={groupId} currentUserId={userId} />
+        )}
       </main>
     </div>
   );
