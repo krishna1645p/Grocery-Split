@@ -89,9 +89,10 @@ export default function Home({ userId, groupId, groupName, members, onBack, onOr
             setOrderName={store.setOrderName}
             storeName={store.storeName}
             setStoreName={store.setStoreName}
-            paidByName={store.paidByName}
-            setPaidByName={store.setPaidByName}
+            payers={store.payers}
+            setPayers={store.setPayers}
             participants={participants}
+            grandTotal={store.summary.grandTotal}
           />
         </motion.section>
 

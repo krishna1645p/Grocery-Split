@@ -9,6 +9,11 @@ export interface Participant {
   email: string;
 }
 
+export interface PayerEntry {
+  name: string;
+  amount: string;
+}
+
 export interface GroceryItem {
   id: string;
   name: string;
@@ -115,7 +120,9 @@ export function computePersonSummaries(
 export function useGroceryStore(userId: string, participants: Participant[]) {
   const [orderName, setOrderName] = useState("");
   const [storeName, setStoreName] = useState("Walmart");
-  const [paidByName, setPaidByName] = useState("");
+  const [payers, setPayers] = useState<PayerEntry[]>(
+    participants.length > 0 ? [{ name: participants[0].name, amount: "" }] : [],
+  );
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustments>({
     tax: 0,
@@ -147,20 +154,29 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
   const reset = useCallback(() => {
     setOrderName("");
     setStoreName("Walmart");
-    setPaidByName("");
+    setPayers(
+      participants.length > 0
+        ? [{ name: participants[0].name, amount: "" }]
+        : [],
+    );
     setItems([]);
     setAdjustments({ tax: 0, delivery: 0, tip: 0, promo: 0 });
     setLastSubmittedOrderId(null);
-  }, []);
+  }, [participants]);
 
   const submitOrder = useCallback(
     async (groupId: string): Promise<string> => {
       if (!userId) throw new Error("Must be signed in to submit an order");
       if (!orderName.trim()) throw new Error("Order name is required");
-      if (!paidByName.trim())
-        throw new Error("Please select who paid for this order");
+      const validPayers = payers.filter(
+        (p) => p.name && parseFloat(p.amount) > 0,
+      );
+      if (validPayers.length === 0)
+        throw new Error("Please enter who paid and how much");
+
       setIsSubmitting(true);
       try {
+        // Insert the order (paid_by_name = first payer for backwards compat)
         const { data: order, error: orderError } = await supabase
           .from("orders")
           .insert({
@@ -168,11 +184,22 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
             store: storeName,
             order_name: orderName.trim(),
             created_by: userId,
-            paid_by_name: paidByName.trim(),
+            paid_by_name: validPayers[0].name,
           })
           .select()
           .single();
         if (orderError) throw orderError;
+
+        // Insert order_payments rows for each payer
+        const payerRows = validPayers.map((p) => ({
+          order_id: order.id,
+          payer_name: p.name,
+          amount: parseFloat(p.amount),
+        }));
+        const { error: payersError } = await supabase
+          .from("order_payments")
+          .insert(payerRows);
+        if (payersError) throw payersError;
 
         if (items.length > 0) {
           const itemsPayload = items.map((item) => ({
@@ -207,15 +234,7 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
         setIsSubmitting(false);
       }
     },
-    [
-      userId,
-      orderName,
-      storeName,
-      paidByName,
-      participants,
-      items,
-      adjustments,
-    ],
+    [userId, orderName, storeName, payers, participants, items, adjustments],
   );
 
   const summary = useMemo(
@@ -228,8 +247,8 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
     setOrderName,
     storeName,
     setStoreName,
-    paidByName,
-    setPaidByName,
+    payers,
+    setPayers,
     items,
     addItem,
     deleteItem,

@@ -36,30 +36,30 @@ export function useGroupBalances(
       const n = members.length;
       if (n === 0) {
         setBalances([]);
+        setLoading(false);
         return;
       }
 
-      // 2. Fetch all orders with items, adjustments, and paid_by_name
+      // 2. Fetch all orders with items, adjustments, and order_payments
       const { data: orders } = await supabase
         .from("orders")
         .select(
-          "id, paid_by_name, items ( id, base_price, quantity, requested_by, split_type, split_with_indices ), adjustments ( tax, delivery, tip, promo_savings )",
+          `
+          id,
+          paid_by_name,
+          items ( id, base_price, quantity, requested_by, split_type, split_with_indices ),
+          adjustments ( tax, delivery, tip, promo_savings ),
+          order_payments ( payer_name, amount )
+        `,
         )
         .eq("group_id", groupId);
 
-      // 3. Build owed matrix [fromIndex][toIndex] = amount
-      // matrix[i][j] means member i owes member j
+      // matrix[i][j] = member i owes member j
       const matrix: number[][] = Array.from({ length: n }, () =>
         Array(n).fill(0),
       );
 
       for (const order of orders ?? []) {
-        // Find who paid — use paid_by_name, fall back to member[0]
-        const payerIndex = order.paid_by_name
-          ? members.findIndex((m) => m.name === order.paid_by_name)
-          : 0;
-        const resolvedPayerIndex = payerIndex >= 0 ? payerIndex : 0;
-
         const adj = order.adjustments?.[0] ?? {
           tax: 0,
           delivery: 0,
@@ -74,22 +74,51 @@ export function useGroupBalances(
           splitWithIndices: i.split_with_indices ?? [],
         }));
 
-        const { personSummaries } = computePersonSummaries(members, items, {
-          tax: adj.tax,
-          delivery: adj.delivery,
-          tip: adj.tip,
-          promo: adj.promo_savings,
-        });
+        const { personSummaries, grandTotal } = computePersonSummaries(
+          members,
+          items,
+          {
+            tax: adj.tax,
+            delivery: adj.delivery,
+            tip: adj.tip,
+            promo: adj.promo_savings,
+          },
+        );
 
-        // Everyone except the payer owes the payer their share
-        for (const p of personSummaries) {
-          if (p.index !== resolvedPayerIndex && p.finalPayable > 0.005) {
-            matrix[p.index][resolvedPayerIndex] += p.finalPayable;
+        // Determine payers: use order_payments if available, fallback to paid_by_name
+        const orderPayers: { name: string; amount: number }[] =
+          order.order_payments && order.order_payments.length > 0
+            ? order.order_payments.map((p: any) => ({
+                name: p.payer_name,
+                amount: p.amount,
+              }))
+            : order.paid_by_name
+              ? [{ name: order.paid_by_name, amount: grandTotal }]
+              : [];
+
+        const totalPaid = orderPayers.reduce(
+          (s: number, p: { name: string; amount: number }) => s + p.amount,
+          0,
+        );
+        if (totalPaid === 0) continue;
+
+        // Each person owes each payer proportionally to how much that payer covered
+        for (const payer of orderPayers) {
+          const payerIndex = members.findIndex((m) => m.name === payer.name);
+          if (payerIndex < 0) continue;
+          const payerShare = payer.amount / totalPaid; // fraction this payer covered
+
+          for (const p of personSummaries) {
+            if (p.index === payerIndex) continue;
+            const owedToPayer = p.finalPayable * payerShare;
+            if (owedToPayer > 0.005) {
+              matrix[p.index][payerIndex] += owedToPayer;
+            }
           }
         }
       }
 
-      // 4. Net out reverse debts — if A owes B $10 and B owes A $4, result is A owes B $6
+      // 3. Net out reverse debts (A owes B $10, B owes A $4 → A owes B $6)
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
           const ij = matrix[i][j];
@@ -97,17 +126,14 @@ export function useGroupBalances(
           if (ij > ji) {
             matrix[i][j] = ij - ji;
             matrix[j][i] = 0;
-          } else if (ji > ij) {
+          } else {
             matrix[j][i] = ji - ij;
             matrix[i][j] = 0;
-          } else {
-            matrix[i][j] = 0;
-            matrix[j][i] = 0;
           }
         }
       }
 
-      // 5. Subtract recorded payments
+      // 4. Subtract recorded settle-up payments
       const { data: payments } = await supabase
         .from("payments")
         .select("paid_by, paid_to, amount")
@@ -124,7 +150,7 @@ export function useGroupBalances(
         }
       }
 
-      // 6. Convert to Balance list (only non-zero entries)
+      // 5. Build result list
       const result: Balance[] = [];
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
