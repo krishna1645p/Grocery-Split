@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/Home";
 import { GroupsPage, type GroupRow } from "@/pages/GroupsPage";
 import { GroupDetailPage, type GroupMember } from "@/pages/GroupDetailPage";
+import { NamePromptModal } from "@/components/NamePromptModal";
 import { Leaf, Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -15,40 +16,73 @@ const queryClient = new QueryClient();
 async function claimGroupMemberships(userId: string, email: string) {
   try {
     await supabase
-      .from('group_members')
+      .from("group_members")
       .update({ user_id: userId })
-      .eq('email', email)
-      .is('user_id', null);
+      .eq("email", email)
+      .is("user_id", null);
   } catch {
     // best-effort — never block sign-in
   }
 }
 
 type Screen =
-  | { type: 'groups' }
-  | { type: 'group-detail'; group: GroupRow }
-  | { type: 'new-order'; group: GroupRow; members: GroupMember[] };
+  | { type: "groups" }
+  | { type: "group-detail"; group: GroupRow }
+  | { type: "new-order"; group: GroupRow; members: GroupMember[] };
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [screen, setScreen] = useState<Screen>({ type: 'groups' });
+  const [screen, setScreen] = useState<Screen>({ type: "groups" });
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
   const [membersTrigger, setMembersTrigger] = useState<string | null>(null);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [profileName, setProfileName] = useState("");
+
+  const checkProfile = async (userId: string, userEmail: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", userId)
+      .single();
+    if (data) {
+      setProfileName(data.display_name);
+      const emailPrefix = userEmail.split("@")[0] ?? "";
+      if (data.display_name === emailPrefix) {
+        setShowNamePrompt(true);
+      }
+    }
+  };
+
+  const handleSaveName = async (name: string) => {
+    if (!session) return;
+    await supabase
+      .from("profiles")
+      .update({ display_name: name, updated_at: new Date().toISOString() })
+      .eq("id", session.user.id);
+    setProfileName(name);
+    setShowNamePrompt(false);
+  };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
-      if (session?.user?.email) {
-        claimGroupMemberships(session.user.id, session.user.email);
-      }
-      setSession(session);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event: string, session: Session | null) => {
-        if (event === 'SIGNED_IN' && session?.user?.email) {
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }: { data: { session: Session | null } }) => {
+        if (session?.user?.email) {
           claimGroupMemberships(session.user.id, session.user.email);
+          checkProfile(session.user.id, session.user.email);
+        }
+        setSession(session);
+        setLoading(false);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (event: string, session: Session | null) => {
+        if (event === "SIGNED_IN" && session?.user?.email) {
+          claimGroupMemberships(session.user.id, session.user.email);
+          checkProfile(session.user.id, session.user.email);
         }
         setSession(session);
         setLoading(false);
@@ -61,14 +95,16 @@ function App() {
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: "https://shared-order-tracker--kp161145.replit.app" },
+      options: {
+        redirectTo: "https://shared-order-tracker--kp161145.replit.app",
+      },
     });
     if (error) alert(error.message);
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setScreen({ type: 'groups' });
+    setScreen({ type: "groups" });
   };
 
   if (loading) {
@@ -89,7 +125,8 @@ function App() {
             </div>
             <h1 className="text-2xl font-bold">GrocerySplit</h1>
             <p className="text-muted-foreground text-sm">
-              Sign in to create and manage shared grocery orders with your roommates.
+              Sign in to create and manage shared grocery orders with your
+              roommates.
             </p>
           </div>
           <button
@@ -106,25 +143,25 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        {screen.type === 'groups' && (
+        {screen.type === "groups" && (
           <GroupsPage
             userId={session.user.id}
             userEmail={session.user.email}
-            onGroupClick={(group) => setScreen({ type: 'group-detail', group })}
+            onGroupClick={(group) => setScreen({ type: "group-detail", group })}
             onSignOut={signOut}
           />
         )}
 
-        {screen.type === 'group-detail' && (
+        {screen.type === "group-detail" && (
           <GroupDetailPage
             userId={session.user.id}
             groupId={screen.group.id}
             groupName={screen.group.name}
             members={screen.group.group_members ?? []}
-            onBack={() => setScreen({ type: 'groups' })}
+            onBack={() => setScreen({ type: "groups" })}
             onNewOrder={() =>
               setScreen({
-                type: 'new-order',
+                type: "new-order",
                 group: screen.group,
                 members: screen.group.group_members ?? [],
               })
@@ -134,28 +171,37 @@ function App() {
             onMembersChanged={async () => {
               setMembersTrigger(Date.now().toString());
               const { data } = await supabase
-                .from('groups')
-                .select('id, name, created_by, group_members ( id, name, email, user_id )')
-                .eq('id', screen.type === 'group-detail' ? screen.group.id : '')
+                .from("groups")
+                .select(
+                  "id, name, created_by, group_members ( id, name, email, user_id )",
+                )
+                .eq("id", screen.type === "group-detail" ? screen.group.id : "")
                 .single();
-              if (data) setScreen({ type: 'group-detail', group: data as GroupRow });
+              if (data)
+                setScreen({ type: "group-detail", group: data as GroupRow });
             }}
           />
         )}
 
-        {screen.type === 'new-order' && (
+        {screen.type === "new-order" && (
           <Home
             key={`order-${screen.group.id}`}
             userId={session.user.id}
             groupId={screen.group.id}
             groupName={screen.group.name}
             members={screen.members}
-            onBack={() => setScreen({ type: 'group-detail', group: screen.group })}
+            onBack={() =>
+              setScreen({ type: "group-detail", group: screen.group })
+            }
             onOrderSubmitted={(orderId) => {
               setLastOrderId(orderId);
-              setScreen({ type: 'group-detail', group: screen.group });
+              setScreen({ type: "group-detail", group: screen.group });
             }}
           />
+        )}
+
+        {showNamePrompt && (
+          <NamePromptModal defaultName={profileName} onSave={handleSaveName} />
         )}
 
         <Toaster />
