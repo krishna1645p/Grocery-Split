@@ -1,8 +1,8 @@
 // @ts-ignore
-import { supabase } from '@/lib/supabase';
-import { useState, useMemo, useCallback } from 'react';
+import { supabase } from "@/lib/supabase";
+import { useState, useMemo, useCallback } from "react";
 
-export type SplitType = 'self' | 'all' | 'selected';
+export type SplitType = "self" | "all" | "selected";
 
 export interface Participant {
   name: string;
@@ -37,7 +37,14 @@ export interface PersonSummary {
 
 export function computePersonSummaries(
   participants: { name: string }[],
-  items: Pick<GroceryItem, 'basePrice' | 'quantity' | 'requestedByIndex' | 'splitType' | 'splitWithIndices'>[],
+  items: Pick<
+    GroceryItem,
+    | "basePrice"
+    | "quantity"
+    | "requestedByIndex"
+    | "splitType"
+    | "splitWithIndices"
+  >[],
   adjustments: Adjustments,
 ): {
   personSummaries: PersonSummary[];
@@ -46,7 +53,13 @@ export function computePersonSummaries(
   grandTotal: number;
 } {
   const n = participants.length;
-  if (n === 0) return { personSummaries: [], totalItemsSubtotal: 0, totalAdjustments: 0, grandTotal: 0 };
+  if (n === 0)
+    return {
+      personSummaries: [],
+      totalItemsSubtotal: 0,
+      totalAdjustments: 0,
+      grandTotal: 0,
+    };
 
   const personItemTotals = new Array(n).fill(0);
   let totalItemsSubtotal = 0;
@@ -55,22 +68,27 @@ export function computePersonSummaries(
     const itemTotal = item.basePrice * item.quantity;
     totalItemsSubtotal += itemTotal;
 
-    if (item.splitType === 'self') {
+    if (item.splitType === "self") {
       if (item.requestedByIndex < n) {
         personItemTotals[item.requestedByIndex] += itemTotal;
       }
-    } else if (item.splitType === 'all') {
+    } else if (item.splitType === "all") {
       const share = itemTotal / n;
       for (let i = 0; i < n; i++) personItemTotals[i] += share;
-    } else if (item.splitType === 'selected') {
+    } else if (item.splitType === "selected") {
       const validIndices = item.splitWithIndices.filter((idx) => idx < n);
       const share = itemTotal / Math.max(1, validIndices.length);
-      validIndices.forEach((idx) => { personItemTotals[idx] += share; });
+      validIndices.forEach((idx) => {
+        personItemTotals[idx] += share;
+      });
     }
   });
 
   const totalAdjustments =
-    adjustments.tax + adjustments.delivery + adjustments.tip - adjustments.promo;
+    adjustments.tax +
+    adjustments.delivery +
+    adjustments.tip -
+    adjustments.promo;
 
   const personSummaries: PersonSummary[] = participants.map((p, index) => {
     const itemsTotal = personItemTotals[index];
@@ -95,8 +113,9 @@ export function computePersonSummaries(
 }
 
 export function useGroceryStore(userId: string, participants: Participant[]) {
-  const [orderName, setOrderName] = useState('');
-  const [storeName, setStoreName] = useState('Walmart');
+  const [orderName, setOrderName] = useState("");
+  const [storeName, setStoreName] = useState("Walmart");
+  const [paidByName, setPaidByName] = useState("");
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustments>({
     tax: 0,
@@ -105,9 +124,11 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
     promo: 0,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [lastSubmittedOrderId, setLastSubmittedOrderId] = useState<string | null>(null);
+  const [lastSubmittedOrderId, setLastSubmittedOrderId] = useState<
+    string | null
+  >(null);
 
-  const addItem = useCallback((item: Omit<GroceryItem, 'id'>) => {
+  const addItem = useCallback((item: Omit<GroceryItem, "id">) => {
     setItems((prev) => [...prev, { ...item, id: crypto.randomUUID() }]);
   }, []);
 
@@ -124,61 +145,78 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
   }, []);
 
   const reset = useCallback(() => {
-    setOrderName('');
-    setStoreName('Walmart');
+    setOrderName("");
+    setStoreName("Walmart");
+    setPaidByName("");
     setItems([]);
     setAdjustments({ tax: 0, delivery: 0, tip: 0, promo: 0 });
     setLastSubmittedOrderId(null);
   }, []);
 
-  const submitOrder = useCallback(async (groupId: string): Promise<string> => {
-    if (!userId) throw new Error('Must be signed in to submit an order');
-    if (!orderName.trim()) throw new Error('Order name is required');
-    setIsSubmitting(true);
-    try {
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          group_id: groupId,
-          store: storeName,
-          order_name: orderName.trim(),
-          created_by: userId,
-        })
-        .select()
-        .single();
-      if (orderError) throw orderError;
+  const submitOrder = useCallback(
+    async (groupId: string): Promise<string> => {
+      if (!userId) throw new Error("Must be signed in to submit an order");
+      if (!orderName.trim()) throw new Error("Order name is required");
+      if (!paidByName.trim())
+        throw new Error("Please select who paid for this order");
+      setIsSubmitting(true);
+      try {
+        const { data: order, error: orderError } = await supabase
+          .from("orders")
+          .insert({
+            group_id: groupId,
+            store: storeName,
+            order_name: orderName.trim(),
+            created_by: userId,
+            paid_by_name: paidByName.trim(),
+          })
+          .select()
+          .single();
+        if (orderError) throw orderError;
 
-      if (items.length > 0) {
-        const itemsPayload = items.map((item) => ({
+        if (items.length > 0) {
+          const itemsPayload = items.map((item) => ({
+            order_id: order.id,
+            name: item.name,
+            link: item.link || null,
+            base_price: item.basePrice,
+            quantity: item.quantity,
+            total_price: item.basePrice * item.quantity,
+            requested_by: participants[item.requestedByIndex]?.name ?? "",
+            split_type: item.splitType,
+            split_with_indices: item.splitWithIndices,
+          }));
+          const { error: itemsError } = await supabase
+            .from("items")
+            .insert(itemsPayload);
+          if (itemsError) throw itemsError;
+        }
+
+        const { error: adjError } = await supabase.from("adjustments").insert({
           order_id: order.id,
-          name: item.name,
-          link: item.link || null,
-          base_price: item.basePrice,
-          quantity: item.quantity,
-          total_price: item.basePrice * item.quantity,
-          requested_by: participants[item.requestedByIndex]?.name ?? '',
-          split_type: item.splitType,
-          split_with_indices: item.splitWithIndices,
-        }));
-        const { error: itemsError } = await supabase.from('items').insert(itemsPayload);
-        if (itemsError) throw itemsError;
+          tax: adjustments.tax,
+          delivery: adjustments.delivery,
+          tip: adjustments.tip,
+          promo_savings: adjustments.promo,
+        });
+        if (adjError) throw adjError;
+
+        setLastSubmittedOrderId(order.id);
+        return order.id;
+      } finally {
+        setIsSubmitting(false);
       }
-
-      const { error: adjError } = await supabase.from('adjustments').insert({
-        order_id: order.id,
-        tax: adjustments.tax,
-        delivery: adjustments.delivery,
-        tip: adjustments.tip,
-        promo_savings: adjustments.promo,
-      });
-      if (adjError) throw adjError;
-
-      setLastSubmittedOrderId(order.id);
-      return order.id;
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [userId, orderName, storeName, participants, items, adjustments]);
+    },
+    [
+      userId,
+      orderName,
+      storeName,
+      paidByName,
+      participants,
+      items,
+      adjustments,
+    ],
+  );
 
   const summary = useMemo(
     () => computePersonSummaries(participants, items, adjustments),
@@ -190,6 +228,8 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
     setOrderName,
     storeName,
     setStoreName,
+    paidByName,
+    setPaidByName,
     items,
     addItem,
     deleteItem,
