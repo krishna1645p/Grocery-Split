@@ -29,6 +29,7 @@ import {
   Check,
   X,
   Link as LinkIcon,
+  CreditCard,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -53,6 +54,12 @@ interface RawAdjustment {
   promo_savings: number;
 }
 
+interface RawOrderPayment {
+  id: string;
+  payer_name: string;
+  amount: number;
+}
+
 interface RawMember {
   id: string;
   name: string;
@@ -71,6 +78,7 @@ interface RawOrder {
   } | null;
   items: RawItem[];
   adjustments: RawAdjustment[];
+  order_payments: RawOrderPayment[];
 }
 
 interface OrderHistoryProps {
@@ -140,6 +148,201 @@ function AdjustmentPill({
   );
 }
 
+/* ───────── Editable Order Payments ───────── */
+
+function EditableOrderPayments({
+  orderId,
+  orderPayments,
+  members,
+  onSaved,
+}: {
+  orderId: string;
+  orderPayments: RawOrderPayment[];
+  members: RawMember[];
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [payers, setPayers] = useState(
+    orderPayments.length > 0
+      ? orderPayments.map((p) => ({
+          id: p.id,
+          name: p.payer_name,
+          amount: String(p.amount),
+        }))
+      : [{ id: "", name: members[0]?.name ?? "", amount: "" }],
+  );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setPayers(
+      orderPayments.length > 0
+        ? orderPayments.map((p) => ({
+            id: p.id,
+            name: p.payer_name,
+            amount: String(p.amount),
+          }))
+        : [{ id: "", name: members[0]?.name ?? "", amount: "" }],
+    );
+  }, [orderPayments, members]);
+
+  const updatePayer = (
+    index: number,
+    field: "name" | "amount",
+    value: string,
+  ) => {
+    setPayers((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)),
+    );
+  };
+
+  const addPayer = () => {
+    const used = payers.map((p) => p.name);
+    const next = members.find((m) => !used.includes(m.name));
+    if (!next) return;
+    setPayers((prev) => [...prev, { id: "", name: next.name, amount: "" }]);
+  };
+
+  const removePayer = (index: number) => {
+    if (payers.length === 1) return;
+    setPayers((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSave = async () => {
+    const valid = payers.filter((p) => p.name && parseFloat(p.amount) > 0);
+    if (valid.length === 0) return;
+    setSaving(true);
+    try {
+      await supabase.from("order_payments").delete().eq("order_id", orderId);
+      await supabase
+        .from("order_payments")
+        .insert(
+          valid.map((p) => ({
+            order_id: orderId,
+            payer_name: p.name,
+            amount: parseFloat(p.amount),
+          })),
+        );
+      setEditing(false);
+      onSaved();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save payments");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+          <CreditCard className="w-3.5 h-3.5" /> Who Paid
+        </h4>
+        {!editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+          >
+            <Pencil className="w-3 h-3" /> Edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="border rounded-xl p-4 bg-secondary/20 space-y-3">
+          {payers.map((payer, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <select
+                value={payer.name}
+                onChange={(e) => updatePayer(idx, "name", e.target.value)}
+                className="flex-1 h-9 px-3 border border-input rounded-md bg-white text-sm"
+              >
+                {members.map((m) => (
+                  <option key={m.id} value={m.name}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              <div className="relative w-28">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={payer.amount}
+                  onChange={(e) => updatePayer(idx, "amount", e.target.value)}
+                  className="pl-6 h-9 bg-white font-mono"
+                  placeholder="0.00"
+                />
+              </div>
+              {payers.length > 1 && (
+                <button
+                  onClick={() => removePayer(idx)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+          {payers.length < members.length && (
+            <button
+              onClick={addPayer}
+              className="flex items-center gap-1.5 text-xs text-primary font-medium"
+            >
+              <Plus className="w-3 h-3" /> Add payer
+            </button>
+          )}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving}
+              className="gap-1.5"
+            >
+              {saving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+          {orderPayments.length > 0 ? (
+            orderPayments.map((p, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-3 px-4 py-2.5 bg-card border rounded-xl"
+              >
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <CreditCard className="w-4 h-4 text-primary" />
+                  {p.payer_name}
+                </div>
+                <span className="font-mono font-semibold text-sm text-primary">
+                  {formatCurrency(p.amount)}
+                </span>
+              </div>
+            ))
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="col-span-full border border-dashed rounded-xl p-4 text-sm text-muted-foreground hover:bg-secondary/20 text-center"
+            >
+              + Add who paid for this order
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ───────── Editable Adjustments ───────── */
 
 function EditableAdjustments({
@@ -178,17 +381,17 @@ function EditableAdjustments({
         tip: parseFloat(tip) || 0,
         promo_savings: parseFloat(promoSavings) || 0,
       };
-
-      const { error } = await supabase.from("adjustments").upsert(
-        {
-          order_id: orderId,
-          ...payload,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "order_id" },
-      );
+      const { error } = await supabase
+        .from("adjustments")
+        .upsert(
+          {
+            order_id: orderId,
+            ...payload,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "order_id" },
+        );
       if (error) throw error;
-
       setEditing(false);
       onSaved();
     } catch (err) {
@@ -838,7 +1041,6 @@ function OrderCard({
     order.groups?.group_members ?? [],
   );
 
-  // Re-fetch members whenever the card is expanded or order changes
   useEffect(() => {
     if (!order.groups?.id) return;
     supabase
@@ -856,6 +1058,7 @@ function OrderCard({
     ? (rawAdj[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 })
     : (rawAdj ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 });
   const orderItems = order.items ?? [];
+  const orderPayments = order.order_payments ?? [];
 
   const itemsForCalc = orderItems.map((i) => {
     const requestedByIndex = members.findIndex(
@@ -870,15 +1073,13 @@ function OrderCard({
     };
   });
 
-  const adjForCalc = {
-    tax: adj.tax,
-    delivery: adj.delivery,
-    tip: adj.tip,
-    promo: adj.promo_savings,
-  };
-
   const { personSummaries, totalItemsSubtotal, totalAdjustments, grandTotal } =
-    computePersonSummaries(members, itemsForCalc, adjForCalc);
+    computePersonSummaries(members, itemsForCalc, {
+      tax: adj.tax,
+      delivery: adj.delivery,
+      tip: adj.tip,
+      promo: adj.promo_savings,
+    });
 
   const createdAt = new Date(order.created_at).toLocaleDateString("en-US", {
     year: "numeric",
@@ -898,7 +1099,6 @@ function OrderCard({
           <div className="bg-primary/10 text-primary p-2.5 rounded-xl shrink-0">
             <ShoppingBag className="w-5 h-5" />
           </div>
-
           <div className="flex-1 min-w-0">
             <p className="font-bold text-foreground truncate leading-snug">
               {order.order_name}
@@ -924,7 +1124,6 @@ function OrderCard({
               )}
             </div>
           </div>
-
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-right hidden sm:block">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
@@ -1030,6 +1229,14 @@ function OrderCard({
                   orderId={order.id}
                   members={members}
                   onAdded={onRefresh}
+                />
+
+                {/* Who Paid (editable) */}
+                <EditableOrderPayments
+                  orderId={order.id}
+                  orderPayments={orderPayments}
+                  members={members}
+                  onSaved={onRefresh}
                 />
 
                 {/* Adjustments (editable) */}
@@ -1192,7 +1399,6 @@ export function OrderHistory({
     setError(null);
     try {
       let groupIds: string[];
-
       if (filterGroupId) {
         groupIds = [filterGroupId];
       } else {
@@ -1207,7 +1413,6 @@ export function OrderHistory({
           ),
         ];
       }
-
       if (groupIds.length === 0) {
         setOrders([]);
         setLoading(false);
@@ -1228,7 +1433,8 @@ export function OrderHistory({
             group_members ( id, name, email )
           ),
           items ( id, name, link, base_price, quantity, requested_by, split_type, split_with_indices ),
-          adjustments ( id, tax, delivery, tip, promo_savings )
+          adjustments ( id, tax, delivery, tip, promo_savings ),
+          order_payments ( id, payer_name, amount )
         `,
         )
         .in("group_id", groupIds)
@@ -1268,17 +1474,14 @@ export function OrderHistory({
 
       {loading && (
         <div className="flex items-center justify-center py-16 text-muted-foreground gap-3">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          Loading orders...
+          <Loader2 className="w-5 h-5 animate-spin" /> Loading orders...
         </div>
       )}
-
       {!loading && error && (
         <Card className="p-6 border-destructive/30 bg-destructive/5 text-destructive text-sm">
           {error}
         </Card>
       )}
-
       {!loading && !error && orders.length === 0 && (
         <Card className="p-12 border-dashed border-2 flex flex-col items-center justify-center text-center bg-secondary/30">
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
@@ -1299,7 +1502,6 @@ export function OrderHistory({
           )}
         </Card>
       )}
-
       {!loading && !error && orders.length > 0 && (
         <div className="space-y-3">
           {orders.map((order) => (
