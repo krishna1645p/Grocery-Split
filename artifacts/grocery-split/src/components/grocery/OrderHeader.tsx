@@ -126,6 +126,14 @@ export function OrderHeader({
                     placeholder="0.00"
                   />
                 </div>
+                <button
+                  onClick={() => updatePayer(idx, "amount", grandTotal > 0 ? grandTotal.toFixed(2) : "")}
+                  className="text-xs text-primary hover:text-primary/80 font-medium whitespace-nowrap transition-colors px-1"
+                  title="Set full amount"
+                  type="button"
+                >
+                  Full
+                </button>
                 {payers.length > 1 && (
                   <button
                     onClick={() => removePayer(idx)}

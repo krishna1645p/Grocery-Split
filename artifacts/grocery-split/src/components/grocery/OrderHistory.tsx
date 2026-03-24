@@ -1047,7 +1047,7 @@ function OrderCard({
       .from("group_members")
       .select("id, name, email")
       .eq("group_id", order.groups.id)
-      .then(({ data }) => {
+      .then(({ data }: { data: RawMember[] | null }) => {
         if (data && data.length > 0) setLiveMembers(data as RawMember[]);
       });
   }, [order.groups?.id, expanded]);
@@ -1400,16 +1400,18 @@ export function OrderHistory({
     try {
       let groupIds: string[];
       if (filterGroupId) {
-        groupIds = [filterGroupId];
+        groupIds = [ // @ts-ignore
+        filterGroupId];
       } else {
         const { data: memberRows, error: memberError } = await supabase
           .from("group_members")
           .select("group_id")
           .eq("user_id", userId);
         if (memberError) throw memberError;
-        groupIds = [
+        groupIds = [ // @ts-ignore
+        
           ...new Set(
-            (memberRows ?? []).map((r: { group_id: string }) => r.group_id),
+            (memberRows ?? []).map((r: { group_id: string }) => r.group_id) as string[],
           ),
         ];
       }

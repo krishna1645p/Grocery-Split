@@ -168,15 +168,15 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
     async (groupId: string): Promise<string> => {
       if (!userId) throw new Error("Must be signed in to submit an order");
       if (!orderName.trim()) throw new Error("Order name is required");
+
+      // Filter to only payers with a valid amount — payers are optional
       const validPayers = payers.filter(
         (p) => p.name && parseFloat(p.amount) > 0,
       );
-      if (validPayers.length === 0)
-        throw new Error("Please enter who paid and how much");
 
       setIsSubmitting(true);
       try {
-        // Insert the order (paid_by_name = first payer for backwards compat)
+        // Insert the order — paid_by_name is optional, only set if a payer was specified
         const { data: order, error: orderError } = await supabase
           .from("orders")
           .insert({
@@ -184,22 +184,24 @@ export function useGroceryStore(userId: string, participants: Participant[]) {
             store: storeName,
             order_name: orderName.trim(),
             created_by: userId,
-            paid_by_name: validPayers[0].name,
+            paid_by_name: validPayers.length > 0 ? validPayers[0].name : null,
           })
           .select()
           .single();
         if (orderError) throw orderError;
 
-        // Insert order_payments rows for each payer
-        const payerRows = validPayers.map((p) => ({
-          order_id: order.id,
-          payer_name: p.name,
-          amount: parseFloat(p.amount),
-        }));
-        const { error: payersError } = await supabase
-          .from("order_payments")
-          .insert(payerRows);
-        if (payersError) throw payersError;
+        // Only insert order_payments if payers were specified
+        if (validPayers.length > 0) {
+          const payerRows = validPayers.map((p) => ({
+            order_id: order.id,
+            payer_name: p.name,
+            amount: parseFloat(p.amount),
+          }));
+          const { error: payersError } = await supabase
+            .from("order_payments")
+            .insert(payerRows);
+          if (payersError) throw payersError;
+        }
 
         if (items.length > 0) {
           const itemsPayload = items.map((item) => ({

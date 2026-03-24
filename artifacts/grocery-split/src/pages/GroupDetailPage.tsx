@@ -264,7 +264,7 @@ export function GroupDetailPage({
         )}
 
         {activeTab === "balances" && (
-          <BalancesTab groupId={groupId} currentUserId={userId} />
+          <BalancesTab groupId={groupId} currentUserId={userId} currentUserName={members.find(m => m.user_id === userId)?.name ?? ''} />
         )}
       </main>
     </div>
