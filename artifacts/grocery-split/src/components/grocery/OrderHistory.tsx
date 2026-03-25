@@ -1,5 +1,5 @@
 // @ts-ignore
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../../../../lib/supabase";
 import { useEffect, useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +29,6 @@ import {
   Check,
   X,
   Link as LinkIcon,
-  CreditCard,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -54,16 +53,11 @@ interface RawAdjustment {
   promo_savings: number;
 }
 
-interface RawOrderPayment {
-  id: string;
-  payer_name: string;
-  amount: number;
-}
-
 interface RawMember {
   id: string;
   name: string;
   email: string | null;
+  user_id: string | null;
 }
 
 interface RawOrder {
@@ -78,7 +72,6 @@ interface RawOrder {
   } | null;
   items: RawItem[];
   adjustments: RawAdjustment[];
-  order_payments: RawOrderPayment[];
 }
 
 interface OrderHistoryProps {
@@ -86,7 +79,22 @@ interface OrderHistoryProps {
   refreshTrigger?: string | null;
   filterGroupId?: string;
   onNewOrder?: () => void;
-  membersTrigger?: string | null;
+}
+
+/* ───────── helpers ───────── */
+
+/** Returns true if the logged-in user is involved in this item */
+function isUserInvolvedInItem(
+  item: RawItem,
+  myName: string | null,
+  myMemberIndex: number,
+): boolean {
+  if (!myName) return true; // unknown → don't dim
+  if (item.split_type === "all") return true;
+  if (item.split_type === "self") return item.requested_by === myName;
+  if (item.split_type === "selected")
+    return (item.split_with_indices ?? []).includes(myMemberIndex);
+  return true;
 }
 
 /* ───────── Small reusable bits ───────── */
@@ -148,201 +156,6 @@ function AdjustmentPill({
   );
 }
 
-/* ───────── Editable Order Payments ───────── */
-
-function EditableOrderPayments({
-  orderId,
-  orderPayments,
-  members,
-  onSaved,
-}: {
-  orderId: string;
-  orderPayments: RawOrderPayment[];
-  members: RawMember[];
-  onSaved: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [payers, setPayers] = useState(
-    orderPayments.length > 0
-      ? orderPayments.map((p) => ({
-          id: p.id,
-          name: p.payer_name,
-          amount: String(p.amount),
-        }))
-      : [{ id: "", name: members[0]?.name ?? "", amount: "" }],
-  );
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setPayers(
-      orderPayments.length > 0
-        ? orderPayments.map((p) => ({
-            id: p.id,
-            name: p.payer_name,
-            amount: String(p.amount),
-          }))
-        : [{ id: "", name: members[0]?.name ?? "", amount: "" }],
-    );
-  }, [orderPayments, members]);
-
-  const updatePayer = (
-    index: number,
-    field: "name" | "amount",
-    value: string,
-  ) => {
-    setPayers((prev) =>
-      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)),
-    );
-  };
-
-  const addPayer = () => {
-    const used = payers.map((p) => p.name);
-    const next = members.find((m) => !used.includes(m.name));
-    if (!next) return;
-    setPayers((prev) => [...prev, { id: "", name: next.name, amount: "" }]);
-  };
-
-  const removePayer = (index: number) => {
-    if (payers.length === 1) return;
-    setPayers((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSave = async () => {
-    const valid = payers.filter((p) => p.name && parseFloat(p.amount) > 0);
-    if (valid.length === 0) return;
-    setSaving(true);
-    try {
-      await supabase.from("order_payments").delete().eq("order_id", orderId);
-      await supabase
-        .from("order_payments")
-        .insert(
-          valid.map((p) => ({
-            order_id: orderId,
-            payer_name: p.name,
-            amount: parseFloat(p.amount),
-          })),
-        );
-      setEditing(false);
-      onSaved();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to save payments");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-          <CreditCard className="w-3.5 h-3.5" /> Who Paid
-        </h4>
-        {!editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-          >
-            <Pencil className="w-3 h-3" /> Edit
-          </button>
-        )}
-      </div>
-
-      {editing ? (
-        <div className="border rounded-xl p-4 bg-secondary/20 space-y-3">
-          {payers.map((payer, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <select
-                value={payer.name}
-                onChange={(e) => updatePayer(idx, "name", e.target.value)}
-                className="flex-1 h-9 px-3 border border-input rounded-md bg-white text-sm"
-              >
-                {members.map((m) => (
-                  <option key={m.id} value={m.name}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-              <div className="relative w-28">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                  $
-                </span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={payer.amount}
-                  onChange={(e) => updatePayer(idx, "amount", e.target.value)}
-                  className="pl-6 h-9 bg-white font-mono"
-                  placeholder="0.00"
-                />
-              </div>
-              {payers.length > 1 && (
-                <button
-                  onClick={() => removePayer(idx)}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
-          {payers.length < members.length && (
-            <button
-              onClick={addPayer}
-              className="flex items-center gap-1.5 text-xs text-primary font-medium"
-            >
-              <Plus className="w-3 h-3" /> Add payer
-            </button>
-          )}
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving}
-              className="gap-1.5"
-            >
-              {saving ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Check className="w-3.5 h-3.5" />
-              )}
-              Save
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-          {orderPayments.length > 0 ? (
-            orderPayments.map((p, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-3 px-4 py-2.5 bg-card border rounded-xl"
-              >
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <CreditCard className="w-4 h-4 text-primary" />
-                  {p.payer_name}
-                </div>
-                <span className="font-mono font-semibold text-sm text-primary">
-                  {formatCurrency(p.amount)}
-                </span>
-              </div>
-            ))
-          ) : (
-            <button
-              onClick={() => setEditing(true)}
-              className="col-span-full border border-dashed rounded-xl p-4 text-sm text-muted-foreground hover:bg-secondary/20 text-center"
-            >
-              + Add who paid for this order
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ───────── Editable Adjustments ───────── */
 
 function EditableAdjustments({
@@ -381,17 +194,17 @@ function EditableAdjustments({
         tip: parseFloat(tip) || 0,
         promo_savings: parseFloat(promoSavings) || 0,
       };
-      const { error } = await supabase
-        .from("adjustments")
-        .upsert(
-          {
-            order_id: orderId,
-            ...payload,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "order_id" },
-        );
+
+      const { error } = await supabase.from("adjustments").upsert(
+        {
+          order_id: orderId,
+          ...payload,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "order_id" },
+      );
       if (error) throw error;
+
       setEditing(false);
       onSaved();
     } catch (err) {
@@ -576,7 +389,6 @@ function AddItemForm({
   const [quantity, setQuantity] = useState("1");
   const [requestedBy, setRequestedBy] = useState(members[0]?.name ?? "");
   const [splitType, setSplitType] = useState("self");
-  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [show, setShow] = useState(false);
 
@@ -593,23 +405,12 @@ function AddItemForm({
     );
   }
 
-  const toggleIndex = (i: number) =>
-    setSelectedIndices((prev) =>
-      prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i],
-    );
-
   const handleSave = async () => {
     if (!name.trim() || !price) return;
     setSaving(true);
     try {
       const bp = parseFloat(price);
       const qty = parseInt(quantity) || 1;
-      const indices =
-        splitType === "all"
-          ? members.map((_: RawMember, i: number) => i)
-          : splitType === "selected"
-            ? selectedIndices
-            : [];
       const { error } = await supabase.from("items").insert({
         order_id: orderId,
         name: name.trim(),
@@ -619,14 +420,16 @@ function AddItemForm({
         total_price: bp * qty,
         requested_by: requestedBy,
         split_type: splitType,
-        split_with_indices: indices,
+        split_with_indices:
+          splitType === "all"
+            ? members.map((_: RawMember, i: number) => i)
+            : [],
       });
       if (error) throw error;
       setName("");
       setLink("");
       setPrice("");
       setQuantity("1");
-      setSelectedIndices([]);
       setShow(false);
       onAdded();
     } catch (err) {
@@ -684,37 +487,19 @@ function AddItemForm({
           className="pl-9 bg-white"
         />
       </div>
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-muted-foreground">
-            Split:
-          </span>
-          {["self", "all", "selected"].map((t) => (
-            <button
-              key={t}
-              onClick={() => setSplitType(t)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-secondary"}`}
-            >
-              {t === "self" ? "Self" : t === "all" ? "Everyone" : "Selected"}
-            </button>
-          ))}
-        </div>
-        {splitType === "selected" && (
-          <div className="flex flex-wrap gap-2 pl-1">
-            {members.map((m, i) => (
-              <button
-                key={m.id}
-                onClick={() => toggleIndex(i)}
-                className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-colors ${selectedIndices.includes(i) ? "bg-purple-600 text-white border-purple-600" : "bg-white text-muted-foreground hover:bg-secondary"}`}
-              >
-                <span className="w-4 h-4 rounded-full flex items-center justify-center font-bold uppercase text-[10px]">
-                  {m.name.charAt(0)}
-                </span>
-                {m.name}
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          Split:
+        </span>
+        {["self", "all"].map((t) => (
+          <button
+            key={t}
+            onClick={() => setSplitType(t)}
+            className={`text-xs px-3 py-1 rounded-full border transition-colors ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-secondary"}`}
+          >
+            {t === "self" ? "Self" : "Everyone"}
+          </button>
+        ))}
       </div>
       <div className="flex gap-2">
         <Button
@@ -743,11 +528,15 @@ function AddItemForm({
 function EditableItemRow({
   item,
   members,
+  myName,
+  myMemberIndex,
   onSaved,
   onDeleted,
 }: {
   item: RawItem;
   members: RawMember[];
+  myName: string | null;
+  myMemberIndex: number;
   onSaved: () => void;
   onDeleted: () => void;
 }) {
@@ -758,16 +547,10 @@ function EditableItemRow({
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [requestedBy, setRequestedBy] = useState(item.requested_by);
   const [splitType, setSplitType] = useState(item.split_type);
-  const [splitWithIndices, setSplitWithIndices] = useState<number[]>(
-    item.split_with_indices ?? [],
-  );
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const toggleEditIndex = (i: number) =>
-    setSplitWithIndices((prev) =>
-      prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i],
-    );
+  const involved = isUserInvolvedInItem(item, myName, myMemberIndex);
 
   const getMemberName = (idx: number) => members[idx]?.name ?? "—";
 
@@ -798,9 +581,7 @@ function EditableItemRow({
           split_with_indices:
             splitType === "all"
               ? members.map((_: RawMember, i: number) => i)
-              : splitType === "selected"
-                ? splitWithIndices
-                : [],
+              : item.split_with_indices,
         })
         .eq("id", item.id);
       if (error) throw error;
@@ -874,29 +655,16 @@ function EditableItemRow({
             </select>
           </td>
           <td className="px-4 py-2 hidden sm:table-cell">
-            <div className="flex flex-wrap gap-1">
-              {["self", "all", "selected"].map((t) => (
+            <div className="flex gap-1">
+              {["self", "all"].map((t) => (
                 <button
                   key={t}
                   onClick={() => setSplitType(t)}
                   className={`text-[10px] px-2 py-0.5 rounded-full border ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground"}`}
                 >
-                  {t === "self" ? "Self" : t === "all" ? "All" : "Sel"}
+                  {t === "self" ? "Self" : "All"}
                 </button>
               ))}
-              {splitType === "selected" && (
-                <div className="flex flex-wrap gap-1 mt-1 w-full">
-                  {members.map((m, i) => (
-                    <button
-                      key={m.id}
-                      onClick={() => toggleEditIndex(i)}
-                      className={`text-[10px] px-2 py-0.5 rounded-full border ${splitWithIndices.includes(i) ? "bg-purple-600 text-white border-purple-600" : "bg-white text-muted-foreground"}`}
-                    >
-                      {m.name}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </td>
           <td className="px-4 py-2">
@@ -921,7 +689,6 @@ function EditableItemRow({
                   setQuantity(String(item.quantity));
                   setRequestedBy(item.requested_by);
                   setSplitType(item.split_type);
-                  setSplitWithIndices(item.split_with_indices ?? []);
                   setEditing(false);
                 }}
                 className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors"
@@ -949,9 +716,17 @@ function EditableItemRow({
     );
   }
 
+  // Not-involved rows: greyed out, no hover highlight
+  const rowClass = involved
+    ? "hover:bg-secondary/20 transition-colors group"
+    : "opacity-40 group";
+
+  const textClass = involved ? "text-foreground" : "text-muted-foreground";
+  const monoClass = involved ? "" : "text-muted-foreground";
+
   return (
-    <tr className="hover:bg-secondary/20 transition-colors group">
-      <td className="px-4 py-3 font-medium text-foreground">
+    <tr className={rowClass}>
+      <td className={`px-4 py-3 font-medium ${textClass}`}>
         <div className="flex items-center gap-2">
           <span className="whitespace-nowrap">{item.name}</span>
           {item.link && (
@@ -968,18 +743,26 @@ function EditableItemRow({
           )}
         </div>
       </td>
-      <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+      <td
+        className={`px-4 py-3 text-right font-mono text-muted-foreground ${monoClass}`}
+      >
         {formatCurrency(item.base_price)}
       </td>
-      <td className="px-4 py-3 text-center font-mono text-muted-foreground">
+      <td
+        className={`px-4 py-3 text-center font-mono text-muted-foreground ${monoClass}`}
+      >
         ×{item.quantity}
       </td>
-      <td className="px-4 py-3 text-right font-mono font-semibold">
+      <td
+        className={`px-4 py-3 text-right font-mono font-semibold ${monoClass}`}
+      >
         {formatCurrency(item.base_price * item.quantity)}
       </td>
       <td className="px-4 py-3 hidden md:table-cell">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold uppercase shrink-0">
+          <div
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0 ${involved ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
+          >
             {(item.requested_by || "?").charAt(0)}
           </div>
           <span className="text-muted-foreground">
@@ -1001,27 +784,29 @@ function EditableItemRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => setEditing(true)}
-            className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
-            title="Edit item"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-            title="Delete item"
-          >
-            {deleting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Trash2 className="w-3.5 h-3.5" />
-            )}
-          </button>
-        </div>
+        {involved && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => setEditing(true)}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+              title="Edit item"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              title="Delete item"
+            >
+              {deleting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -1031,34 +816,27 @@ function EditableItemRow({
 
 function OrderCard({
   order,
+  userId,
   onRefresh,
 }: {
   order: RawOrder;
+  userId: string;
   onRefresh: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [liveMembers, setLiveMembers] = useState<RawMember[]>(
-    order.groups?.group_members ?? [],
-  );
 
-  useEffect(() => {
-    if (!order.groups?.id) return;
-    supabase
-      .from("group_members")
-      .select("id, name, email")
-      .eq("group_id", order.groups.id)
-      .then(({ data }: { data: RawMember[] | null }) => {
-        if (data && data.length > 0) setLiveMembers(data as RawMember[]);
-      });
-  }, [order.groups?.id, expanded]);
+  const members = order.groups?.group_members ?? [];
 
-  const members = liveMembers;
+  // Find the logged-in user's member record
+  const myMember = members.find((m) => m.user_id === userId) ?? null;
+  const myName = myMember?.name ?? null;
+  const myMemberIndex = myMember ? members.indexOf(myMember) : -1;
+
   const rawAdj = order.adjustments;
   const adj: RawAdjustment = Array.isArray(rawAdj)
     ? (rawAdj[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 })
     : (rawAdj ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 });
   const orderItems = order.items ?? [];
-  const orderPayments = order.order_payments ?? [];
 
   const itemsForCalc = orderItems.map((i) => {
     const requestedByIndex = members.findIndex(
@@ -1073,13 +851,15 @@ function OrderCard({
     };
   });
 
+  const adjForCalc = {
+    tax: adj.tax,
+    delivery: adj.delivery,
+    tip: adj.tip,
+    promo: adj.promo_savings,
+  };
+
   const { personSummaries, totalItemsSubtotal, totalAdjustments, grandTotal } =
-    computePersonSummaries(members, itemsForCalc, {
-      tax: adj.tax,
-      delivery: adj.delivery,
-      tip: adj.tip,
-      promo: adj.promo_savings,
-    });
+    computePersonSummaries(members, itemsForCalc, adjForCalc);
 
   const createdAt = new Date(order.created_at).toLocaleDateString("en-US", {
     year: "numeric",
@@ -1099,6 +879,7 @@ function OrderCard({
           <div className="bg-primary/10 text-primary p-2.5 rounded-xl shrink-0">
             <ShoppingBag className="w-5 h-5" />
           </div>
+
           <div className="flex-1 min-w-0">
             <p className="font-bold text-foreground truncate leading-snug">
               {order.order_name}
@@ -1124,6 +905,7 @@ function OrderCard({
               )}
             </div>
           </div>
+
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-right hidden sm:block">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
@@ -1196,6 +978,8 @@ function OrderCard({
                                 key={item.id}
                                 item={item}
                                 members={members}
+                                myName={myName}
+                                myMemberIndex={myMemberIndex}
                                 onSaved={onRefresh}
                                 onDeleted={onRefresh}
                               />
@@ -1231,14 +1015,6 @@ function OrderCard({
                   onAdded={onRefresh}
                 />
 
-                {/* Who Paid (editable) */}
-                <EditableOrderPayments
-                  orderId={order.id}
-                  orderPayments={orderPayments}
-                  members={members}
-                  onSaved={onRefresh}
-                />
-
                 {/* Adjustments (editable) */}
                 <EditableAdjustments
                   orderId={order.id}
@@ -1272,52 +1048,76 @@ function OrderCard({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {personSummaries.map((p) => (
-                            <tr
-                              key={p.index}
-                              className="hover:bg-secondary/20 transition-colors"
-                            >
-                              <td className="px-4 py-3 font-medium">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold uppercase shrink-0">
-                                    {p.name.charAt(0)}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="font-semibold text-foreground leading-snug">
-                                      {p.name}
-                                    </p>
-                                    {members[p.index]?.email && (
-                                      <p className="text-xs text-muted-foreground truncate">
-                                        {members[p.index].email}
+                          {personSummaries.map((p) => {
+                            const isMe = p.name === myName;
+                            return (
+                              <tr
+                                key={p.index}
+                                className={
+                                  isMe
+                                    ? "bg-primary/5 hover:bg-primary/10 transition-colors"
+                                    : "opacity-40 hover:opacity-60 transition-opacity"
+                                }
+                              >
+                                <td className="px-4 py-3 font-medium">
+                                  <div className="flex items-center gap-2.5">
+                                    <div
+                                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0 ${
+                                        isMe
+                                          ? "bg-primary/10 text-primary ring-2 ring-primary/30"
+                                          : "bg-muted text-muted-foreground"
+                                      }`}
+                                    >
+                                      {p.name.charAt(0)}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="font-semibold leading-snug flex items-center gap-1.5">
+                                        {p.name}
+                                        {isMe && (
+                                          <span className="text-[10px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                                            you
+                                          </span>
+                                        )}
                                       </p>
-                                    )}
+                                      {members[p.index]?.email && (
+                                        <p className="text-xs text-muted-foreground truncate">
+                                          {members[p.index].email}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right font-mono text-muted-foreground hidden sm:table-cell">
-                                {formatCurrency(p.itemsTotal)}
-                              </td>
-                              <td className="px-4 py-3 text-right font-mono hidden sm:table-cell">
-                                <span
-                                  className={
-                                    p.adjustmentsTotal > 0
-                                      ? "text-orange-500"
-                                      : p.adjustmentsTotal < 0
-                                        ? "text-primary"
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-muted-foreground hidden sm:table-cell">
+                                  {formatCurrency(p.itemsTotal)}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono hidden sm:table-cell">
+                                  <span
+                                    className={
+                                      p.adjustmentsTotal > 0
+                                        ? "text-orange-500"
+                                        : p.adjustmentsTotal < 0
+                                          ? "text-primary"
+                                          : "text-muted-foreground"
+                                    }
+                                  >
+                                    {p.adjustmentsTotal > 0 ? "+" : ""}
+                                    {formatCurrency(p.adjustmentsTotal)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span
+                                    className={`font-mono font-bold text-base ${
+                                      isMe
+                                        ? "text-foreground"
                                         : "text-muted-foreground"
-                                  }
-                                >
-                                  {p.adjustmentsTotal > 0 ? "+" : ""}
-                                  {formatCurrency(p.adjustmentsTotal)}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <span className="font-mono font-bold text-base text-foreground">
-                                  {formatCurrency(p.finalPayable)}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
+                                    }`}
+                                  >
+                                    {formatCurrency(p.finalPayable)}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                         <tfoot className="bg-secondary/30 border-t-2 border-border font-bold">
                           <tr>
@@ -1388,7 +1188,6 @@ export function OrderHistory({
   refreshTrigger,
   filterGroupId,
   onNewOrder,
-  membersTrigger,
 }: OrderHistoryProps) {
   const [orders, setOrders] = useState<RawOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1399,22 +1198,22 @@ export function OrderHistory({
     setError(null);
     try {
       let groupIds: string[];
+
       if (filterGroupId) {
-        groupIds = [ // @ts-ignore
-        filterGroupId];
+        groupIds = [filterGroupId];
       } else {
         const { data: memberRows, error: memberError } = await supabase
           .from("group_members")
           .select("group_id")
           .eq("user_id", userId);
         if (memberError) throw memberError;
-        groupIds = [ // @ts-ignore
-        
+        groupIds = [
           ...new Set(
-            (memberRows ?? []).map((r: { group_id: string }) => r.group_id) as string[],
+            (memberRows ?? []).map((r: { group_id: string }) => r.group_id),
           ),
         ];
       }
+
       if (groupIds.length === 0) {
         setOrders([]);
         setLoading(false);
@@ -1432,11 +1231,10 @@ export function OrderHistory({
           groups (
             id,
             name,
-            group_members ( id, name, email )
+            group_members ( id, name, email, user_id )
           ),
           items ( id, name, link, base_price, quantity, requested_by, split_type, split_with_indices ),
-          adjustments ( id, tax, delivery, tip, promo_savings ),
-          order_payments ( id, payer_name, amount )
+          adjustments ( id, tax, delivery, tip, promo_savings )
         `,
         )
         .in("group_id", groupIds)
@@ -1453,7 +1251,7 @@ export function OrderHistory({
 
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders, refreshTrigger, membersTrigger]);
+  }, [fetchOrders, refreshTrigger]);
 
   return (
     <section>
@@ -1476,14 +1274,17 @@ export function OrderHistory({
 
       {loading && (
         <div className="flex items-center justify-center py-16 text-muted-foreground gap-3">
-          <Loader2 className="w-5 h-5 animate-spin" /> Loading orders...
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Loading orders...
         </div>
       )}
+
       {!loading && error && (
         <Card className="p-6 border-destructive/30 bg-destructive/5 text-destructive text-sm">
           {error}
         </Card>
       )}
+
       {!loading && !error && orders.length === 0 && (
         <Card className="p-12 border-dashed border-2 flex flex-col items-center justify-center text-center bg-secondary/30">
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
@@ -1504,10 +1305,16 @@ export function OrderHistory({
           )}
         </Card>
       )}
+
       {!loading && !error && orders.length > 0 && (
         <div className="space-y-3">
           {orders.map((order) => (
-            <OrderCard key={order.id} order={order} onRefresh={fetchOrders} />
+            <OrderCard
+              key={order.id}
+              order={order}
+              userId={userId}
+              onRefresh={fetchOrders}
+            />
           ))}
         </div>
       )}
