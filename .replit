@@ -26,6 +26,9 @@ runButton = "Project"
 [userenv.shared]
 VITE_SUPABASE_URL = "https://fviajyyfehltjjfaykva.supabase.co"
 VITE_SUPABASE_ANON_KEY = "sb_publishable_VbeQvVQ62kvQHMokrkgHOA_t6Cb6r7_"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2aWFqeXlmZWhsdGpqZmF5a3ZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDExMTYwMywiZXhwIjoyMDg5Njg3NjAzfQ.0ygi7FLz1LIRIE_Iv2g8MxzfQORTzrBbE_btrL3IBPs"
+RESEND_API_KEY = "re_5bvBig98_KuEZ5mZtnok1QVU97vG9kXrW"
+SUPABASE_URL = "https://fviajyyfehltjjfaykva.supabase.co"
 
 [agent]
 expertMode = true
