@@ -31,6 +31,7 @@ interface GroupDetailPageProps {
   onBack: () => void;
   onNewOrder: () => void;
   onMembersChanged?: () => void;
+  profileName?: string;
   refreshTrigger?: string | null;
   membersTrigger?: string | null;
 }
@@ -147,6 +148,7 @@ export function GroupDetailPage({
   onBack,
   onNewOrder,
   onMembersChanged,
+  profileName = "Someone",
   refreshTrigger,
   membersTrigger,
 }: GroupDetailPageProps) {
