@@ -96,7 +96,7 @@ function App() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "https://shared-order-tracker--kp161145.replit.app",
+        redirectTo: "https://grocerysplit.com",
       },
     });
     if (error) alert(error.message);
