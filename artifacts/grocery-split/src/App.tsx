@@ -13,11 +13,13 @@ import { Leaf, Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-async function claimGroupMemberships(userId: string, email: string) {
+async function claimGroupMemberships(userId: string, email: string, displayName?: string) {
   try {
+    const update: Record<string, string> = { user_id: userId };
+    if (displayName) update.name = displayName;
     await supabase
       .from("group_members")
-      .update({ user_id: userId })
+      .update(update)
       .eq("email", email)
       .is("user_id", null);
   } catch {
@@ -69,7 +71,7 @@ function App() {
       .getSession()
       .then(({ data: { session } }: { data: { session: Session | null } }) => {
         if (session?.user?.email) {
-          claimGroupMemberships(session.user.id, session.user.email);
+          claimGroupMemberships(session.user.id, session.user.email, session.user.user_metadata?.full_name);
           checkProfile(session.user.id, session.user.email);
         }
         setSession(session);
@@ -81,7 +83,7 @@ function App() {
     } = supabase.auth.onAuthStateChange(
       (event: string, session: Session | null) => {
         if (event === "SIGNED_IN" && session?.user?.email) {
-          claimGroupMemberships(session.user.id, session.user.email);
+          claimGroupMemberships(session.user.id, session.user.email, session.user.user_metadata?.full_name);
           checkProfile(session.user.id, session.user.email);
         }
         setSession(session);

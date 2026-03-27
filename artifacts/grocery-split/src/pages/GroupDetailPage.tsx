@@ -75,6 +75,18 @@ function AddMemberForm({
       });
 
       if (error) throw error;
+
+      // Send invite email (best-effort, never blocks UI)
+      if (email.trim()) {
+        supabase.functions.invoke("notify-member-added", {
+          body: {
+            memberEmail: email.trim(),
+            memberName: name.trim(),
+            groupName,
+            invitedByName: invitedBy ?? "Someone",
+          },
+        }).catch(() => {});
+      }
       onAdded();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to add member");
