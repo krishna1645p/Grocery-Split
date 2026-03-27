@@ -160,6 +160,7 @@ function App() {
             groupId={screen.group.id}
             groupName={screen.group.name}
             members={screen.group.group_members ?? []}
+            profileName={profileName}
             onBack={() => setScreen({ type: "groups" })}
             onNewOrder={() =>
               setScreen({

@@ -37,10 +37,14 @@ interface GroupDetailPageProps {
 
 function AddMemberForm({
   groupId,
+  groupName,
+  invitedBy,
   onAdded,
   onCancel,
 }: {
   groupId: string;
+  groupName: string;
+  invitedBy: string;
   onAdded: () => void;
   onCancel: () => void;
 }) {
@@ -234,6 +238,8 @@ export function GroupDetailPage({
           {addingMember ? (
             <AddMemberForm
               groupId={groupId}
+              groupName={groupName}
+              invitedBy={profileName || "Someone"}
               onAdded={handleMemberAdded}
               onCancel={() => setAddingMember(false)}
             />
