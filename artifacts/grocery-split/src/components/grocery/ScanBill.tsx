@@ -6,7 +6,7 @@
 // 2. Add ANTHROPIC_API_KEY to Supabase secrets
 // 3. Flip the flag below to: true
 // ────────────────────────────────────────────────────────────────────────────
-const SCAN_BILL_ENABLED = true;
+const SCAN_BILL_ENABLED = false;
 // ────────────────────────────────────────────────────────────────────────────
 
 // TWO usage modes:
@@ -283,7 +283,12 @@ function ScanBillActive(props: ScanBillProps) {
         },
       });
 
-      if (error) throw new Error(error.message ?? "Edge function error");
+      if (error) {
+        const detail = data?.error ?? error.message ?? "Edge function error";
+        throw new Error(
+          typeof detail === "string" ? detail : JSON.stringify(detail),
+        );
+      }
 
       const parsed = data as {
         items: { name: string; base_price: number; quantity: number }[];
@@ -396,14 +401,16 @@ function ScanBillActive(props: ScanBillProps) {
         if (itemsErr) throw itemsErr;
 
         if (adj.apply) {
-          const { error: adjErr } = await supabase.from("adjustments").upsert(
-            {
-              order_id: props.orderId,
-              ...resultAdj,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "order_id" },
-          );
+          const { error: adjErr } = await supabase
+            .from("adjustments")
+            .upsert(
+              {
+                order_id: props.orderId,
+                ...resultAdj,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "order_id" },
+            );
           if (adjErr) throw adjErr;
         }
 
