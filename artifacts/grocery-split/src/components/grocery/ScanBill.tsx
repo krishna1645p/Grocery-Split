@@ -6,7 +6,7 @@
 // 2. Add ANTHROPIC_API_KEY to Supabase secrets
 // 3. Flip the flag below to: true
 // ────────────────────────────────────────────────────────────────────────────
-const SCAN_BILL_ENABLED = false;
+const SCAN_BILL_ENABLED = true;
 // ────────────────────────────────────────────────────────────────────────────
 
 // TWO usage modes:
