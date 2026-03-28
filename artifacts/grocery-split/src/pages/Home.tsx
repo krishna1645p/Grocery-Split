@@ -7,7 +7,10 @@ import { SettlementSummary } from "@/components/grocery/SettlementSummary";
 import { ArrowLeft, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { ScanBill } from "@/components/grocery/ScanBill";
+// @ts-ignore
+import { supabase } from "../../../../lib/supabase";
 
 interface GroupMember {
   id: string;
@@ -25,15 +28,37 @@ interface HomeProps {
   onOrderSubmitted: (orderId: string) => void;
 }
 
-export default function Home({ userId, groupId, groupName, members, onBack, onOrderSubmitted }: HomeProps) {
+export default function Home({
+  userId,
+  groupId,
+  groupName,
+  members,
+  onBack,
+  onOrderSubmitted,
+}: HomeProps) {
   const { toast } = useToast();
 
   const participants = useMemo<Participant[]>(
-    () => members.map((m) => ({ name: m.name, email: m.email ?? '' })),
+    () => members.map((m) => ({ name: m.name, email: m.email ?? "" })),
     [members],
   );
 
   const store = useGroceryStore(userId, participants);
+
+  const [currentUserName, setCurrentUserName] = useState("");
+  useEffect(() => {
+    supabase.auth
+      .getUser()
+      .then(
+        ({
+          data,
+        }: {
+          data: { user: { user_metadata?: { full_name?: string } } | null };
+        }) => {
+          setCurrentUserName(data.user?.user_metadata?.full_name ?? "");
+        },
+      );
+  }, []);
 
   const participantNames = useMemo(
     () => participants.map((p) => p.name),
@@ -51,7 +76,8 @@ export default function Home({ userId, groupId, groupName, members, onBack, onOr
     } catch (err: unknown) {
       toast({
         title: "Failed to save order",
-        description: err instanceof Error ? err.message : "Something went wrong.",
+        description:
+          err instanceof Error ? err.message : "Something went wrong.",
         variant: "destructive",
       });
     }
@@ -72,13 +98,14 @@ export default function Home({ userId, groupId, groupName, members, onBack, onOr
           <h1 className="font-bold text-lg truncate flex-1">New Order</h1>
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <Users className="w-4 h-4" />
-            <span className="hidden sm:inline">{members.length} member{members.length !== 1 ? 's' : ''}</span>
+            <span className="hidden sm:inline">
+              {members.length} member{members.length !== 1 ? "s" : ""}
+            </span>
           </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 md:py-10 space-y-10">
-
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -122,6 +149,47 @@ export default function Home({ userId, groupId, groupName, members, onBack, onOr
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.08 }}
+        >
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              Have a receipt? Let AI fill in the items automatically.
+            </p>
+            <ScanBill
+              mode="new-order"
+              members={participants}
+              currentUserName={currentUserName}
+              onItemsScanned={(scannedItems, scannedAdj) => {
+                scannedItems.forEach((item) =>
+                  store.addItem({
+                    name: item.name,
+                    link: item.link ?? "",
+                    basePrice: item.base_price,
+                    quantity: item.quantity,
+                    requestedByIndex: Math.max(
+                      0,
+                      participants.findIndex(
+                        (p) => p.name === item.requested_by,
+                      ),
+                    ),
+                    splitType: item.split_type,
+                    splitWithIndices: item.split_with_indices,
+                  }),
+                );
+                store.updateAdjustments({
+                  tax: scannedAdj.tax,
+                  delivery: scannedAdj.delivery,
+                  tip: scannedAdj.tip,
+                  promo: scannedAdj.promo_savings,
+                });
+              }}
+            />
+          </div>
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
         >
           <Adjustments
@@ -142,7 +210,6 @@ export default function Home({ userId, groupId, groupName, members, onBack, onOr
             lastSubmittedOrderId={store.lastSubmittedOrderId}
           />
         </motion.section>
-
       </main>
     </div>
   );

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { computePersonSummaries } from "@/hooks/use-grocery-store";
+import { ScanBill } from "./ScanBill";
 import {
   History,
   ChevronDown,
@@ -32,8 +33,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-/* ───────── Types ───────── */
-
 interface RawItem {
   id: string;
   name: string;
@@ -57,7 +56,6 @@ interface RawMember {
   id: string;
   name: string;
   email: string | null;
-  user_id: string | null;
 }
 
 interface RawOrder {
@@ -76,28 +74,11 @@ interface RawOrder {
 
 interface OrderHistoryProps {
   userId: string;
+  currentUserName?: string;
   refreshTrigger?: string | null;
   filterGroupId?: string;
   onNewOrder?: () => void;
 }
-
-/* ───────── helpers ───────── */
-
-/** Returns true if the logged-in user is involved in this item */
-function isUserInvolvedInItem(
-  item: RawItem,
-  myName: string | null,
-  myMemberIndex: number,
-): boolean {
-  if (!myName) return true; // unknown → don't dim
-  if (item.split_type === "all") return true;
-  if (item.split_type === "self") return item.requested_by === myName;
-  if (item.split_type === "selected")
-    return (item.split_with_indices ?? []).includes(myMemberIndex);
-  return true;
-}
-
-/* ───────── Small reusable bits ───────── */
 
 function SplitBadge({ type }: { type: string }) {
   if (type === "self")
@@ -156,8 +137,6 @@ function AdjustmentPill({
   );
 }
 
-/* ───────── Editable Adjustments ───────── */
-
 function EditableAdjustments({
   orderId,
   adj,
@@ -194,7 +173,6 @@ function EditableAdjustments({
         tip: parseFloat(tip) || 0,
         promo_savings: parseFloat(promoSavings) || 0,
       };
-
       const { error } = await supabase.from("adjustments").upsert(
         {
           order_id: orderId,
@@ -204,7 +182,6 @@ function EditableAdjustments({
         { onConflict: "order_id" },
       );
       if (error) throw error;
-
       setEditing(false);
       onSaved();
     } catch (err) {
@@ -315,7 +292,6 @@ function EditableAdjustments({
         <button
           onClick={() => setEditing(true)}
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-          title="Edit adjustments"
         >
           <Pencil className="w-3 h-3" /> Edit
         </button>
@@ -371,8 +347,6 @@ function EditableAdjustments({
     </div>
   );
 }
-
-/* ───────── Add Item Form ───────── */
 
 function AddItemForm({
   orderId,
@@ -481,7 +455,7 @@ function AddItemForm({
       <div className="relative">
         <LinkIcon className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground/60" />
         <Input
-          placeholder="Product link (optional) — e.g. https://walmart.com/..."
+          placeholder="Product link (optional)"
           value={link}
           onChange={(e) => setLink(e.target.value)}
           className="pl-9 bg-white"
@@ -523,20 +497,14 @@ function AddItemForm({
   );
 }
 
-/* ───────── Editable Item Row ───────── */
-
 function EditableItemRow({
   item,
   members,
-  myName,
-  myMemberIndex,
   onSaved,
   onDeleted,
 }: {
   item: RawItem;
   members: RawMember[];
-  myName: string | null;
-  myMemberIndex: number;
   onSaved: () => void;
   onDeleted: () => void;
 }) {
@@ -547,13 +515,13 @@ function EditableItemRow({
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [requestedBy, setRequestedBy] = useState(item.requested_by);
   const [splitType, setSplitType] = useState(item.split_type);
+  const [selectedIndices, setSelectedIndices] = useState<number[]>(
+    item.split_with_indices ?? [],
+  );
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const involved = isUserInvolvedInItem(item, myName, myMemberIndex);
-
   const getMemberName = (idx: number) => members[idx]?.name ?? "—";
-
   const getSplitDescription = () => {
     if (item.split_type === "self") return item.requested_by || "—";
     if (item.split_type === "all") return `All ${members.length}`;
@@ -562,12 +530,23 @@ function EditableItemRow({
       .join(", ");
   };
 
+  const toggleIndex = (i: number) =>
+    setSelectedIndices((prev) =>
+      prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i],
+    );
+
   const handleSave = async () => {
     if (!name.trim() || !price) return;
     setSaving(true);
     try {
       const bp = parseFloat(price);
       const qty = parseInt(quantity) || 1;
+      const indices =
+        splitType === "all"
+          ? members.map((_: RawMember, i: number) => i)
+          : splitType === "selected"
+            ? selectedIndices
+            : [];
       const { error } = await supabase
         .from("items")
         .update({
@@ -578,10 +557,7 @@ function EditableItemRow({
           total_price: bp * qty,
           requested_by: requestedBy,
           split_type: splitType,
-          split_with_indices:
-            splitType === "all"
-              ? members.map((_: RawMember, i: number) => i)
-              : item.split_with_indices,
+          split_with_indices: indices,
         })
         .eq("id", item.id);
       if (error) throw error;
@@ -654,17 +630,46 @@ function EditableItemRow({
               ))}
             </select>
           </td>
-          <td className="px-4 py-2 hidden sm:table-cell">
-            <div className="flex gap-1">
-              {["self", "all"].map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setSplitType(t)}
-                  className={`text-[10px] px-2 py-0.5 rounded-full border ${splitType === t ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground"}`}
-                >
-                  {t === "self" ? "Self" : "All"}
-                </button>
-              ))}
+          {/* Split column — always visible, not hidden on mobile */}
+          <td className="px-4 py-2">
+            <div className="space-y-2">
+              {/* Split type toggle */}
+              <div className="flex gap-1 flex-wrap">
+                {["self", "all", "selected"].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setSplitType(t)}
+                    className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                      splitType === t
+                        ? "bg-primary text-white border-primary"
+                        : "bg-white text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {t === "self" ? "Self" : t === "all" ? "All" : "Select"}
+                  </button>
+                ))}
+              </div>
+              {/* Member checkboxes when "selected" */}
+              {splitType === "selected" && members.length > 0 && (
+                <div className="flex flex-col gap-1 pl-0.5">
+                  {members.map((m, i) => (
+                    <label
+                      key={m.id}
+                      className="flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIndices.includes(i)}
+                        onChange={() => toggleIndex(i)}
+                        className="accent-primary w-3 h-3"
+                      />
+                      <span className="text-xs text-foreground truncate max-w-[100px]">
+                        {m.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </td>
           <td className="px-4 py-2">
@@ -673,7 +678,6 @@ function EditableItemRow({
                 onClick={handleSave}
                 disabled={saving}
                 className="w-7 h-7 rounded-full flex items-center justify-center bg-primary text-white hover:bg-primary/90 transition-colors"
-                title="Save"
               >
                 {saving ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -689,10 +693,10 @@ function EditableItemRow({
                   setQuantity(String(item.quantity));
                   setRequestedBy(item.requested_by);
                   setSplitType(item.split_type);
+                  setSelectedIndices(item.split_with_indices ?? []);
                   setEditing(false);
                 }}
                 className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors"
-                title="Cancel"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -716,17 +720,9 @@ function EditableItemRow({
     );
   }
 
-  // Not-involved rows: greyed out, no hover highlight
-  const rowClass = involved
-    ? "hover:bg-secondary/20 transition-colors group"
-    : "opacity-40 group";
-
-  const textClass = involved ? "text-foreground" : "text-muted-foreground";
-  const monoClass = involved ? "" : "text-muted-foreground";
-
   return (
-    <tr className={rowClass}>
-      <td className={`px-4 py-3 font-medium ${textClass}`}>
+    <tr className="hover:bg-secondary/20 transition-colors group">
+      <td className="px-4 py-3 font-medium text-foreground">
         <div className="flex items-center gap-2">
           <span className="whitespace-nowrap">{item.name}</span>
           {item.link && (
@@ -743,26 +739,18 @@ function EditableItemRow({
           )}
         </div>
       </td>
-      <td
-        className={`px-4 py-3 text-right font-mono text-muted-foreground ${monoClass}`}
-      >
+      <td className="px-4 py-3 text-right font-mono text-muted-foreground">
         {formatCurrency(item.base_price)}
       </td>
-      <td
-        className={`px-4 py-3 text-center font-mono text-muted-foreground ${monoClass}`}
-      >
+      <td className="px-4 py-3 text-center font-mono text-muted-foreground">
         ×{item.quantity}
       </td>
-      <td
-        className={`px-4 py-3 text-right font-mono font-semibold ${monoClass}`}
-      >
+      <td className="px-4 py-3 text-right font-mono font-semibold">
         {formatCurrency(item.base_price * item.quantity)}
       </td>
       <td className="px-4 py-3 hidden md:table-cell">
         <div className="flex items-center gap-2">
-          <div
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0 ${involved ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
-          >
+          <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold uppercase shrink-0">
             {(item.requested_by || "?").charAt(0)}
           </div>
           <span className="text-muted-foreground">
@@ -784,54 +772,42 @@ function EditableItemRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        {involved && (
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={() => setEditing(true)}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
-              title="Edit item"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-              title="Delete item"
-            >
-              {deleting ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => setEditing(true)}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            {deleting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
       </td>
     </tr>
   );
 }
 
-/* ───────── Order Card ───────── */
-
 function OrderCard({
   order,
-  userId,
+  currentUserName,
   onRefresh,
 }: {
   order: RawOrder;
-  userId: string;
+  currentUserName: string;
   onRefresh: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   const members = order.groups?.group_members ?? [];
-
-  // Find the logged-in user's member record
-  const myMember = members.find((m) => m.user_id === userId) ?? null;
-  const myName = myMember?.name ?? null;
-  const myMemberIndex = myMember ? members.indexOf(myMember) : -1;
-
   const rawAdj = order.adjustments;
   const adj: RawAdjustment = Array.isArray(rawAdj)
     ? (rawAdj[0] ?? { tax: 0, delivery: 0, tip: 0, promo_savings: 0 })
@@ -857,7 +833,6 @@ function OrderCard({
     tip: adj.tip,
     promo: adj.promo_savings,
   };
-
   const { personSummaries, totalItemsSubtotal, totalAdjustments, grandTotal } =
     computePersonSummaries(members, itemsForCalc, adjForCalc);
 
@@ -879,7 +854,6 @@ function OrderCard({
           <div className="bg-primary/10 text-primary p-2.5 rounded-xl shrink-0">
             <ShoppingBag className="w-5 h-5" />
           </div>
-
           <div className="flex-1 min-w-0">
             <p className="font-bold text-foreground truncate leading-snug">
               {order.order_name}
@@ -905,7 +879,6 @@ function OrderCard({
               )}
             </div>
           </div>
-
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-right hidden sm:block">
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
@@ -938,7 +911,6 @@ function OrderCard({
           >
             <div className="border-t bg-secondary/10">
               <div className="p-5 space-y-6">
-                {/* Items Table */}
                 {orderItems.length > 0 && (
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
@@ -978,8 +950,6 @@ function OrderCard({
                                 key={item.id}
                                 item={item}
                                 members={members}
-                                myName={myName}
-                                myMemberIndex={myMemberIndex}
                                 onSaved={onRefresh}
                                 onDeleted={onRefresh}
                               />
@@ -1008,21 +978,28 @@ function OrderCard({
                   </div>
                 )}
 
-                {/* Add Item */}
-                <AddItemForm
-                  orderId={order.id}
-                  members={members}
-                  onAdded={onRefresh}
-                />
+                {/* Add Item + Scan Bill side by side */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <AddItemForm
+                    orderId={order.id}
+                    members={members}
+                    onAdded={onRefresh}
+                  />
+                  <ScanBill
+                    mode="order"
+                    orderId={order.id}
+                    members={members}
+                    currentUserName={currentUserName}
+                    onAdded={onRefresh}
+                  />
+                </div>
 
-                {/* Adjustments (editable) */}
                 <EditableAdjustments
                   orderId={order.id}
                   adj={adj}
                   onSaved={onRefresh}
                 />
 
-                {/* Per-Person Breakdown */}
                 {personSummaries.length > 0 && (
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
@@ -1048,76 +1025,52 @@ function OrderCard({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {personSummaries.map((p) => {
-                            const isMe = p.name === myName;
-                            return (
-                              <tr
-                                key={p.index}
-                                className={
-                                  isMe
-                                    ? "bg-primary/5 hover:bg-primary/10 transition-colors"
-                                    : "opacity-40 hover:opacity-60 transition-opacity"
-                                }
-                              >
-                                <td className="px-4 py-3 font-medium">
-                                  <div className="flex items-center gap-2.5">
-                                    <div
-                                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0 ${
-                                        isMe
-                                          ? "bg-primary/10 text-primary ring-2 ring-primary/30"
-                                          : "bg-muted text-muted-foreground"
-                                      }`}
-                                    >
-                                      {p.name.charAt(0)}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="font-semibold leading-snug flex items-center gap-1.5">
-                                        {p.name}
-                                        {isMe && (
-                                          <span className="text-[10px] font-normal text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
-                                            you
-                                          </span>
-                                        )}
-                                      </p>
-                                      {members[p.index]?.email && (
-                                        <p className="text-xs text-muted-foreground truncate">
-                                          {members[p.index].email}
-                                        </p>
-                                      )}
-                                    </div>
+                          {personSummaries.map((p) => (
+                            <tr
+                              key={p.index}
+                              className="hover:bg-secondary/20 transition-colors"
+                            >
+                              <td className="px-4 py-3 font-medium">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold uppercase shrink-0">
+                                    {p.name.charAt(0)}
                                   </div>
-                                </td>
-                                <td className="px-4 py-3 text-right font-mono text-muted-foreground hidden sm:table-cell">
-                                  {formatCurrency(p.itemsTotal)}
-                                </td>
-                                <td className="px-4 py-3 text-right font-mono hidden sm:table-cell">
-                                  <span
-                                    className={
-                                      p.adjustmentsTotal > 0
-                                        ? "text-orange-500"
-                                        : p.adjustmentsTotal < 0
-                                          ? "text-primary"
-                                          : "text-muted-foreground"
-                                    }
-                                  >
-                                    {p.adjustmentsTotal > 0 ? "+" : ""}
-                                    {formatCurrency(p.adjustmentsTotal)}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <span
-                                    className={`font-mono font-bold text-base ${
-                                      isMe
-                                        ? "text-foreground"
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-foreground leading-snug">
+                                      {p.name}
+                                    </p>
+                                    {members[p.index]?.email && (
+                                      <p className="text-xs text-muted-foreground truncate">
+                                        {members[p.index].email}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-muted-foreground hidden sm:table-cell">
+                                {formatCurrency(p.itemsTotal)}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono hidden sm:table-cell">
+                                <span
+                                  className={
+                                    p.adjustmentsTotal > 0
+                                      ? "text-orange-500"
+                                      : p.adjustmentsTotal < 0
+                                        ? "text-primary"
                                         : "text-muted-foreground"
-                                    }`}
-                                  >
-                                    {formatCurrency(p.finalPayable)}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
+                                  }
+                                >
+                                  {p.adjustmentsTotal > 0 ? "+" : ""}
+                                  {formatCurrency(p.adjustmentsTotal)}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <span className="font-mono font-bold text-base text-foreground">
+                                  {formatCurrency(p.finalPayable)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                         <tfoot className="bg-secondary/30 border-t-2 border-border font-bold">
                           <tr>
@@ -1140,7 +1093,6 @@ function OrderCard({
                   </div>
                 )}
 
-                {/* Delete Order */}
                 <div className="flex justify-end pt-2 border-t border-dashed">
                   <Button
                     variant="ghost"
@@ -1181,10 +1133,9 @@ function OrderCard({
   );
 }
 
-/* ───────── Order History (main export) ───────── */
-
 export function OrderHistory({
   userId,
+  currentUserName = "",
   refreshTrigger,
   filterGroupId,
   onNewOrder,
@@ -1198,7 +1149,6 @@ export function OrderHistory({
     setError(null);
     try {
       let groupIds: string[];
-
       if (filterGroupId) {
         groupIds = [filterGroupId];
       } else {
@@ -1223,19 +1173,10 @@ export function OrderHistory({
       const { data, error: fetchError } = await supabase
         .from("orders")
         .select(
-          `
-          id,
-          order_name,
-          store,
-          created_at,
-          groups (
-            id,
-            name,
-            group_members ( id, name, email, user_id )
-          ),
+          `id, order_name, store, created_at,
+          groups ( id, name, group_members ( id, name, email ) ),
           items ( id, name, link, base_price, quantity, requested_by, split_type, split_with_indices ),
-          adjustments ( id, tax, delivery, tip, promo_savings )
-        `,
+          adjustments ( id, tax, delivery, tip, promo_savings )`,
         )
         .in("group_id", groupIds)
         .order("created_at", { ascending: false });
@@ -1274,8 +1215,7 @@ export function OrderHistory({
 
       {loading && (
         <div className="flex items-center justify-center py-16 text-muted-foreground gap-3">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          Loading orders...
+          <Loader2 className="w-5 h-5 animate-spin" /> Loading orders…
         </div>
       )}
 
@@ -1312,7 +1252,7 @@ export function OrderHistory({
             <OrderCard
               key={order.id}
               order={order}
-              userId={userId}
+              currentUserName={currentUserName}
               onRefresh={fetchOrders}
             />
           ))}
