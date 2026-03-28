@@ -32,7 +32,7 @@ const SCAN_BILL_ENABLED = true;
 //   />
 
 // @ts-ignore
-import { supabase } from "../../../../../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
