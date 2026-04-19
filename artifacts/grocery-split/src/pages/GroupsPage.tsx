@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { CreateGroupDialog } from "@/components/groups/CreateGroupDialog";
 import { OverallBalancePage } from "@/components/grocery/OverallBalancePage";
+import { NotificationBell } from "@/components/grocery/NotificationBell";
 import { AnimatePresence, motion } from "framer-motion";
 
 export interface GroupMember {
@@ -128,6 +129,8 @@ export function GroupsPage({
                 {userEmail}
               </span>
             )}
+            {/* Notification Bell */}
+            <NotificationBell userId={userId} />
             <button
               onClick={onSignOut}
               className="text-sm font-medium px-3 py-1.5 rounded-lg border border-border hover:bg-secondary transition-colors"

@@ -401,16 +401,14 @@ function ScanBillActive(props: ScanBillProps) {
         if (itemsErr) throw itemsErr;
 
         if (adj.apply) {
-          const { error: adjErr } = await supabase
-            .from("adjustments")
-            .upsert(
-              {
-                order_id: props.orderId,
-                ...resultAdj,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "order_id" },
-            );
+          const { error: adjErr } = await supabase.from("adjustments").upsert(
+            {
+              order_id: props.orderId,
+              ...resultAdj,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "order_id" },
+          );
           if (adjErr) throw adjErr;
         }
 
