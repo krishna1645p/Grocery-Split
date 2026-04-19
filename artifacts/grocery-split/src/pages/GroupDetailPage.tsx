@@ -9,8 +9,11 @@ import {
   Check,
   X,
   Loader2,
+  Bell,
 } from "lucide-react";
 import { OrderHistory } from "@/components/grocery/OrderHistory";
+import { AlertsPanel } from "@/components/grocery/AlertsPanel";
+import { NewAlertModal } from "@/components/grocery/NewAlertModal";
 import { BalancesTab } from "@/components/BalancesTab";
 // @ts-ignore
 import { supabase } from "@/lib/supabase";
@@ -83,14 +86,16 @@ function AddMemberForm({
 
       // Send invite email (best-effort, never blocks UI)
       if (email.trim()) {
-        supabase.functions.invoke("notify-member-added", {
-          body: {
-            memberEmail: email.trim(),
-            memberName: name.trim(),
-            groupName,
-            invitedByName: invitedBy ?? "Someone",
-          },
-        }).catch(() => {});
+        supabase.functions
+          .invoke("notify-member-added", {
+            body: {
+              memberEmail: email.trim(),
+              memberName: name.trim(),
+              groupName,
+              invitedByName: invitedBy ?? "Someone",
+            },
+          })
+          .catch(() => {});
       }
       onAdded();
     } catch (err) {
@@ -153,11 +158,22 @@ export function GroupDetailPage({
   membersTrigger,
 }: GroupDetailPageProps) {
   const [addingMember, setAddingMember] = useState(false);
-  const [activeTab, setActiveTab] = useState<"orders" | "balances">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "alerts" | "balances">(
+    "orders",
+  );
+  const [showNewAlert, setShowNewAlert] = useState(false);
+  const [alertRefreshTrigger, setAlertRefreshTrigger] = useState<string | null>(
+    null,
+  );
 
   const handleMemberAdded = () => {
     setAddingMember(false);
     onMembersChanged?.();
+  };
+
+  const handleAlertCreated = () => {
+    setAlertRefreshTrigger(new Date().toISOString());
+    setActiveTab("alerts");
   };
 
   return (
@@ -174,11 +190,25 @@ export function GroupDetailPage({
           <span className="text-muted-foreground/50">/</span>
           <h1 className="font-bold text-lg truncate flex-1">{groupName}</h1>
           <div className="flex items-center gap-2 shrink-0">
+            {/* New Order */}
             <Button onClick={onNewOrder} className="gap-2">
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">New Order</span>
               <span className="sm:hidden">Order</span>
             </Button>
+
+            {/* New Alert */}
+            <Button
+              variant="outline"
+              onClick={() => setShowNewAlert(true)}
+              className="gap-2"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="hidden sm:inline">New Alert</span>
+              <span className="sm:hidden">Alert</span>
+            </Button>
+
+            {/* Delete group */}
             <button
               onClick={async () => {
                 if (
@@ -258,7 +288,7 @@ export function GroupDetailPage({
 
         {/* Tab switcher */}
         <div className="flex gap-1 bg-secondary/50 rounded-xl p-1 w-fit">
-          {(["orders", "balances"] as const).map((tab) => (
+          {(["orders", "alerts", "balances"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -283,10 +313,37 @@ export function GroupDetailPage({
           />
         )}
 
+        {activeTab === "alerts" && (
+          <AlertsPanel
+            groupId={groupId}
+            userId={userId}
+            members={members}
+            refreshTrigger={alertRefreshTrigger}
+            onNewAlert={() => setShowNewAlert(true)}
+          />
+        )}
+
         {activeTab === "balances" && (
-          <BalancesTab groupId={groupId} currentUserId={userId} currentUserName={members.find(m => m.user_id === userId)?.name ?? ''} />
+          <BalancesTab
+            groupId={groupId}
+            currentUserId={userId}
+            currentUserName={
+              members.find((m) => m.user_id === userId)?.name ?? ""
+            }
+          />
         )}
       </main>
+
+      {/* New Alert Modal */}
+      {showNewAlert && (
+        <NewAlertModal
+          groupId={groupId}
+          userId={userId}
+          members={members}
+          onClose={() => setShowNewAlert(false)}
+          onCreated={handleAlertCreated}
+        />
+      )}
     </div>
   );
 }
